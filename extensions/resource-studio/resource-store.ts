@@ -3,15 +3,38 @@ import { access, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/p
 
 const kebabCaseNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export function isValidResourceName(name) {
+export type ResourceEntry = {
+  kind: string;
+  name: string;
+  command: string;
+  filePath: string;
+  label: string;
+  directoryPath?: string;
+  groupName?: string;
+  indexFilePath?: string;
+};
+
+export function isValidResourceName(name: string): boolean {
   return kebabCaseNamePattern.test(name);
 }
 
-export function buildAgentDocument({ description = "", body = "Describe this agent's responsibilities, constraints, and workflow here.\n" } = {}) {
+export function buildAgentDocument({
+  description = "",
+  body = "Describe this agent's responsibilities, constraints, and workflow here.\n",
+}: {
+  description?: string;
+  body?: string;
+} = {}): string {
   return `${buildFrontmatter({ description })}\n${body.trimEnd()}\n`;
 }
 
-export function buildPromptDocument({ description = "", body = "Describe when to use this prompt and what output it should produce.\n" } = {}) {
+export function buildPromptDocument({
+  description = "",
+  body = "Describe when to use this prompt and what output it should produce.\n",
+}: {
+  description?: string;
+  body?: string;
+} = {}): string {
   return `${buildFrontmatter({ description })}\n${body.trimEnd()}\n`;
 }
 
@@ -21,22 +44,29 @@ export function buildSkillDocument({
   license = "",
   compatibility = "",
   body,
-} = {}) {
+}: {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  body?: string;
+}): string {
   const defaultBody = `# ${name}\n\n## Purpose\n\nDescribe what this skill does and when the agent should use it.\n\n## Workflow\n\n- Describe the recommended sequence of steps.\n- Reference helper files relative to this skill directory when needed.\n\n## Verification\n\n\`\`\`bash\n# Add verification commands here\n\`\`\`\n`;
 
-  return `${buildFrontmatter({
-    name,
-    description,
-    license,
-    compatibility,
-  })}\n${(body ?? defaultBody).trimEnd()}\n`;
+  return `${buildFrontmatter({ name, description, license, compatibility })}\n${(body ?? defaultBody).trimEnd()}\n`;
 }
 
-export function buildPromptGroupIndex({ description = "", order = [] } = {}) {
+export function buildPromptGroupIndex({
+  description = "",
+  order = [],
+}: {
+  description?: string;
+  order?: string[];
+} = {}): string {
   return `${buildFrontmatter({ type: "group", description, order })}\n`;
 }
 
-export function readPromptGroupOrder(document) {
+export function readPromptGroupOrder(document: string): string[] {
   const frontmatter = readFrontmatter(document);
   const orderLine = frontmatter.find((line) => line.startsWith("order:"));
   if (!orderLine) return [];
@@ -44,31 +74,23 @@ export function readPromptGroupOrder(document) {
   const arrayMatch = orderLine.match(/^order:\s*\[(.*)\]\s*$/);
   if (!arrayMatch) return [];
 
-  return arrayMatch[1]
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  return arrayMatch[1].split(",").map((entry) => entry.trim()).filter(Boolean);
 }
 
-export async function removePromptSubcommandFromOrder(indexFilePath, subcommandName) {
+export async function removePromptSubcommandFromOrder(indexFilePath: string, subcommandName: string): Promise<void> {
   const document = await readFile(indexFilePath, "utf8");
   const order = readPromptGroupOrder(document).filter((entry) => entry !== subcommandName);
-  const updatedDocument = upsertPromptGroupOrder(document, order);
-  await writeFile(indexFilePath, updatedDocument);
+  await writeFile(indexFilePath, upsertPromptGroupOrder(document, order));
 }
 
-export async function appendPromptSubcommandToOrder(indexFilePath, subcommandName) {
+export async function appendPromptSubcommandToOrder(indexFilePath: string, subcommandName: string): Promise<void> {
   const document = await readFile(indexFilePath, "utf8");
   const order = readPromptGroupOrder(document);
-  if (!order.includes(subcommandName)) {
-    order.push(subcommandName);
-  }
-
-  const updatedDocument = upsertPromptGroupOrder(document, order);
-  await writeFile(indexFilePath, updatedDocument);
+  if (!order.includes(subcommandName)) order.push(subcommandName);
+  await writeFile(indexFilePath, upsertPromptGroupOrder(document, order));
 }
 
-export async function listProjectAgents(cwd) {
+export async function listProjectAgents(cwd: string): Promise<ResourceEntry[]> {
   const agentDirectory = await getProjectResourceDirectory(cwd, [".pi", "agents"]);
   const entries = await readDirectoryEntries(agentDirectory);
 
@@ -84,15 +106,15 @@ export async function listProjectAgents(cwd) {
         command: `@${name}`,
         filePath,
         label: `${name} — ${toRelativeProjectPath(cwd, filePath)}`,
-      };
+      } satisfies ResourceEntry;
     })
     .sort(compareByLabel);
 }
 
-export async function listProjectSkills(cwd) {
+export async function listProjectSkills(cwd: string): Promise<ResourceEntry[]> {
   const skillDirectory = await getProjectResourceDirectory(cwd, [".pi", "skills"]);
   const entries = await readDirectoryEntries(skillDirectory);
-  const skills = [];
+  const skills: ResourceEntry[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -113,10 +135,10 @@ export async function listProjectSkills(cwd) {
   return skills.sort(compareByLabel);
 }
 
-export async function listProjectPrompts(cwd) {
+export async function listProjectPrompts(cwd: string): Promise<ResourceEntry[]> {
   const promptDirectory = await getProjectResourceDirectory(cwd, [".pi", "prompts"]);
   const entries = await readDirectoryEntries(promptDirectory);
-  const prompts = [];
+  const prompts: ResourceEntry[] = [];
 
   for (const entry of entries) {
     const entryPath = path.join(promptDirectory, entry.name);
@@ -174,88 +196,75 @@ export async function listProjectPrompts(cwd) {
   return prompts.sort(comparePromptEntries);
 }
 
-export async function getProjectResourceDirectory(cwd, relativeSegments) {
+export async function getProjectResourceDirectory(cwd: string, relativeSegments: string[]): Promise<string> {
   const existingDirectory = await findNearestExistingDirectory(cwd, relativeSegments);
-  if (existingDirectory) return existingDirectory;
-
-  return path.join(cwd, ...relativeSegments);
+  return existingDirectory ?? path.join(cwd, ...relativeSegments);
 }
 
-export async function ensureProjectResourceDirectory(cwd, relativeSegments) {
+export async function ensureProjectResourceDirectory(cwd: string, relativeSegments: string[]): Promise<string> {
   const directoryPath = await getProjectResourceDirectory(cwd, relativeSegments);
   await mkdir(directoryPath, { recursive: true });
   return directoryPath;
 }
 
-export async function deleteFile(filePath) {
+export async function deleteFile(filePath: string): Promise<void> {
   await rm(filePath, { force: true });
 }
 
-export async function deleteDirectory(directoryPath) {
+export async function deleteDirectory(directoryPath: string): Promise<void> {
   await rm(directoryPath, { recursive: true, force: true });
 }
 
-export async function readTextFile(filePath) {
+export async function readTextFile(filePath: string): Promise<string> {
   return readFile(filePath, "utf8");
 }
 
-export async function writeTextFile(filePath, content) {
+export async function writeTextFile(filePath: string, content: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, content);
 }
 
-export async function countMarkdownFiles(directoryPath) {
+export async function countMarkdownFiles(directoryPath: string): Promise<number> {
   const entries = await readDirectoryEntries(directoryPath);
   return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "_index.md").length;
 }
 
-export function toRelativeProjectPath(cwd, filePath) {
+export function toRelativeProjectPath(cwd: string, filePath: string): string {
   return path.relative(cwd, filePath) || path.basename(filePath);
 }
 
-function buildFrontmatter(fields) {
+function buildFrontmatter(fields: Record<string, string | string[]>): string {
   const lines = Object.entries(fields)
-    .filter(([, value]) => {
-      if (Array.isArray(value)) return value.length > 0;
-      return typeof value === "string" ? value.trim().length > 0 : value !== undefined && value !== null;
-    })
-    .map(([key, value]) => {
-      if (Array.isArray(value)) return `${key}: [${value.join(", ")}]`;
-      return `${key}: ${formatYamlScalar(value)}`;
-    });
+    .filter(([, value]) => Array.isArray(value) ? value.length > 0 : value.trim().length > 0)
+    .map(([key, value]) => Array.isArray(value) ? `${key}: [${value.join(", ")}]` : `${key}: ${formatYamlScalar(value)}`);
 
   if (lines.length === 0) return "";
   return `---\n${lines.join("\n")}\n---`;
 }
 
-function formatYamlScalar(value) {
-  const text = String(value);
-  if (/^[^:"'\[\]{}#,]+$/.test(text)) return text;
-  return JSON.stringify(text);
+function formatYamlScalar(value: string): string {
+  if (/^[^:"'\[\]{}#,]+$/.test(value)) return value;
+  return JSON.stringify(value);
 }
 
-function readFrontmatter(document) {
+function readFrontmatter(document: string): string[] {
   const match = document.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return [];
   return match[1].split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
-function isPromptGroupDocument(document) {
+function isPromptGroupDocument(document: string): boolean {
   return readFrontmatter(document).some((line) => line === "type: group" || line === 'type: "group"');
 }
 
-function upsertPromptGroupOrder(document, order) {
-  if (!document.startsWith("---\n")) {
-    return buildPromptGroupIndex({ order }).trimEnd() + "\n";
-  }
+function upsertPromptGroupOrder(document: string, order: string[]): string {
+  if (!document.startsWith("---\n")) return `${buildPromptGroupIndex({ order }).trimEnd()}\n`;
 
   const frontmatterMatch = document.match(/^---\n([\s\S]*?)\n---/);
-  if (!frontmatterMatch) {
-    return buildPromptGroupIndex({ order }).trimEnd() + "\n";
-  }
+  if (!frontmatterMatch) return `${buildPromptGroupIndex({ order }).trimEnd()}\n`;
 
   const frontmatterLines = frontmatterMatch[1].split("\n");
-  const nextFrontmatterLines = [];
+  const nextFrontmatterLines: string[] = [];
   let wroteOrder = false;
 
   for (const line of frontmatterLines) {
@@ -268,22 +277,18 @@ function upsertPromptGroupOrder(document, order) {
     nextFrontmatterLines.push(line);
   }
 
-  if (!wroteOrder) {
-    nextFrontmatterLines.push(`order: [${order.join(", ")}]`);
-  }
+  if (!wroteOrder) nextFrontmatterLines.push(`order: [${order.join(", ")}]`);
 
   const body = document.slice(frontmatterMatch[0].length);
   return `---\n${nextFrontmatterLines.join("\n")}\n---${body}`;
 }
 
-async function findNearestExistingDirectory(cwd, relativeSegments) {
+async function findNearestExistingDirectory(cwd: string, relativeSegments: string[]): Promise<string | undefined> {
   let currentDirectory = path.resolve(cwd);
 
   while (true) {
     const candidateDirectory = path.join(currentDirectory, ...relativeSegments);
-    if (await isDirectory(candidateDirectory)) {
-      return candidateDirectory;
-    }
+    if (await isDirectory(candidateDirectory)) return candidateDirectory;
 
     const parentDirectory = path.dirname(currentDirectory);
     if (parentDirectory === currentDirectory) return undefined;
@@ -291,7 +296,7 @@ async function findNearestExistingDirectory(cwd, relativeSegments) {
   }
 }
 
-async function isDirectory(candidatePath) {
+async function isDirectory(candidatePath: string): Promise<boolean> {
   try {
     const entry = await stat(candidatePath);
     return entry.isDirectory();
@@ -300,7 +305,7 @@ async function isDirectory(candidatePath) {
   }
 }
 
-async function pathExists(candidatePath) {
+async function pathExists(candidatePath: string): Promise<boolean> {
   try {
     await access(candidatePath);
     return true;
@@ -309,7 +314,7 @@ async function pathExists(candidatePath) {
   }
 }
 
-async function readDirectoryEntries(directoryPath) {
+async function readDirectoryEntries(directoryPath: string) {
   try {
     return await readdir(directoryPath, { withFileTypes: true });
   } catch {
@@ -317,18 +322,18 @@ async function readDirectoryEntries(directoryPath) {
   }
 }
 
-function compareByLabel(left, right) {
+function compareByLabel(left: ResourceEntry, right: ResourceEntry): number {
   return left.label.localeCompare(right.label);
 }
 
-function comparePromptEntries(left, right) {
+function comparePromptEntries(left: ResourceEntry, right: ResourceEntry): number {
   const leftWeight = promptKindWeight[left.kind] ?? 99;
   const rightWeight = promptKindWeight[right.kind] ?? 99;
   if (leftWeight !== rightWeight) return leftWeight - rightWeight;
   return left.command.localeCompare(right.command);
 }
 
-const promptKindWeight = {
+const promptKindWeight: Record<string, number> = {
   group: 0,
   subcommand: 1,
   flat: 2,

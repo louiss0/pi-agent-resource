@@ -12,7 +12,7 @@ import {
   listProjectPrompts,
   readPromptGroupOrder,
   removePromptSubcommandFromOrder,
-} from "../extensions/resource-studio/resource-store.js";
+} from "../@extensions/resource-studio/resource-store.ts";
 
 test("isValidResourceName accepts lowercase kebab-case names", () => {
   assert.equal(isValidResourceName("my-skill"), true);

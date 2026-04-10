@@ -22,7 +22,7 @@ It supports:
 
 ## Installed extension
 
-The package exposes the extension from `extensions/resource-studio/index.js`.
+The package exposes the extension from `@extensions/resource-studio/index.ts`.
 
 ## Commands
 
