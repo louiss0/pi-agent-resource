@@ -24,5 +24,6 @@ function generateSubcommandArgumentCompletionsUsingSubLabel(subLabel: string) {
 
 export function getFilterSubcommandArgumentCompletionFromStringUsingSubLabel(subLabel: string) {
   const completions = generateSubcommandArgumentCompletionsUsingSubLabel(subLabel);
-  return (value: string) => completions.filter((completion) => completion.value === value);
+  return (value: string) =>
+    completions.filter((completion) => completion.value.startsWith(value));
 }
