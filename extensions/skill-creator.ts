@@ -21,7 +21,7 @@ export default (pi: ExtensionAPI) => {
 type Dependencies = Record<string, unknown>;
 
 export function generateCommandHandlerUsingDeps(
-  dependency: Dependencies,
+  _dependency: Dependencies,
 ): RegisteredCommand["handler"] {
   return async (arg, ctx) => {
     const result = parseSubCommandValuesFromArgument(arg);
