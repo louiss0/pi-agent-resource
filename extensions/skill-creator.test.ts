@@ -1,4 +1,4 @@
-import type { ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
+import { type ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
 import { CURSOR_MARKER, Key, type TUI } from "@mariozechner/pi-tui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
@@ -15,14 +15,16 @@ import { SUBCOMMANDS } from "../shared/subcommands";
 import { generateCommandHandlerUsingDeps, SkillForm } from "./skill-creator";
 
 describe("Skill Creator", () => {
-  function createSkillForm() {
+  function createSkillForm(themeOverride?: Theme) {
     const done = vi.fn();
     const tui = {
       requestRender: vi.fn(),
     } as unknown as TUI;
-    const theme = {
-      fg: (_color: string, text: string) => text,
-    } as unknown as Theme;
+    const theme =
+      themeOverride ??
+      ({
+        fg: (_color: string, text: string) => text,
+      } as unknown as Theme);
     const form = new SkillForm(tui, theme, done);
 
     form.focused = true;
@@ -86,6 +88,32 @@ describe("Skill Creator", () => {
       expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
     });
 
+    it("should render validation errors using the error theme color", () => {
+      const theme = new Theme(
+        {
+          error: "#ff0000",
+          accent: "#00ffff",
+          dim: "#888888",
+        } as ConstructorParameters<typeof Theme>[0],
+        {} as ConstructorParameters<typeof Theme>[1],
+        "truecolor",
+      );
+      const { form } = createSkillForm(theme);
+
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+
+      const lines = renderFormLines(form);
+      const nameErrorLine = lines.find((line) => line.includes("× Name is required"));
+      const descriptionErrorLine = lines.find((line) =>
+        line.includes("× Description is required"),
+      );
+      const errorAnsi = theme.getFgAnsi("error");
+
+      expect(nameErrorLine).toContain(`${errorAnsi}× Name is required`);
+      expect(descriptionErrorLine).toContain(`${errorAnsi}× Description is required`);
+    });
+
     it("should submit the entered values with the correct field mapping", () => {
       const { form, done } = createSkillForm();
 
@@ -101,10 +129,6 @@ describe("Skill Creator", () => {
       expect(done).toHaveBeenCalledWith({
         name: "test-skill",
         description: "Useful skill description",
-      });
-      expect(done).not.toHaveBeenCalledWith({
-        name: "Useful skill description",
-        description: "test-skill",
       });
     });
 

@@ -124,11 +124,7 @@ export class SkillForm extends Container implements Focusable {
     this.#updateFieldLabels();
   }
 
-  constructor(
-    tui: TUI,
-    theme: Theme,
-    done: (value: SkillFormValues | null) => void,
-  ) {
+  constructor(tui: TUI, theme: Theme, done: (value: SkillFormValues | null) => void) {
     super();
     this.#done = done;
     this.#theme = theme;
@@ -191,9 +187,7 @@ export class SkillForm extends Container implements Focusable {
     }
 
     this.#inputs[this.#activeFieldIndex].handleInput(data);
-    this.#validateField(this.#activeFieldIndex, {
-      showError: this.#shouldShowValidationErrors,
-    });
+    this.#validateField(this.#activeFieldIndex, this.#shouldShowValidationErrors);
     this.#tui.requestRender();
   }
 
@@ -217,7 +211,7 @@ export class SkillForm extends Container implements Focusable {
 
     const firstInvalidFieldIndex = this.#validateAllFields();
 
-    if (firstInvalidFieldIndex !== null) {
+    if (firstInvalidFieldIndex !== undefined) {
       this.#activeFieldIndex = firstInvalidFieldIndex;
       this.#syncInputFocus();
       this.#updateFieldLabels();
@@ -236,12 +230,12 @@ export class SkillForm extends Container implements Focusable {
   }
 
   #validateAllFields() {
-    let firstInvalidFieldIndex: number | null = null;
+    let firstInvalidFieldIndex: number | undefined;
 
     this.#inputs.forEach((_input, index) => {
-      const isValid = this.#validateField(index);
+      const isValid = this.#validateField(index, true);
 
-      if (!isValid && firstInvalidFieldIndex === null) {
+      if (!isValid && firstInvalidFieldIndex === undefined) {
         firstInvalidFieldIndex = index;
       }
     });
@@ -249,8 +243,7 @@ export class SkillForm extends Container implements Focusable {
     return firstInvalidFieldIndex;
   }
 
-  #validateField(index: number, options: { showError?: boolean } = {}) {
-    const { showError = true } = options;
+  #validateField(index: number, showError = false) {
     const field = skillFieldNames[index];
     const error = getSkillFieldError(field, this.#inputs[index].getValue());
 
