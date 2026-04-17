@@ -1,6 +1,6 @@
 import { picklist, safeParse } from "valibot";
 
-const SUBCOMMANDS = picklist(["create", "edit", "delete"]);
+export const SUBCOMMANDS = picklist(["create", "edit", "delete"]);
 
 export function parseSubCommandValuesFromArgument(argument: string) {
   return safeParse(SUBCOMMANDS, argument);

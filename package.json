@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "This extension is useful for making agent skills, propmts and subagents",
   "scripts": {
-    "test": "vitest",
+    "dev": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
@@ -17,6 +17,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.33.0",
   "devDependencies": {
+    "@biomejs/biome": "2.4.12",
     "@vitest/coverage-v8": "^4.1.4",
     "@vitest/ui": "^4.1.4",
     "vite": "^8.0.8",
