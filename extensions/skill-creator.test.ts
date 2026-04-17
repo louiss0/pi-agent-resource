@@ -1,7 +1,18 @@
 import type { ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
-import { Key, type KeyId, type TUI } from "@mariozechner/pi-tui";
+import { CURSOR_MARKER, Key, type TUI } from "@mariozechner/pi-tui";
+
+vi.mock("@mariozechner/pi-tui", async () => {
+  const module =
+    await vi.importActual<typeof import("@mariozechner/pi-tui")>("@mariozechner/pi-tui");
+
+  return {
+    ...module,
+    matchesKey: (data: string, key: string) => data === key,
+  };
+});
+
 import { SUBCOMMANDS } from "../shared/subcommands";
-import { SkillForm, generateCommandHandlerUsingDeps } from "./skill-creator";
+import { generateCommandHandlerUsingDeps, SkillForm } from "./skill-creator";
 
 describe("Skill Creator", () => {
   function createSkillForm() {
@@ -29,77 +40,71 @@ describe("Skill Creator", () => {
     return form.render(80).join("\n");
   }
 
-  function getTerminalInputForKey(key: KeyId) {
-    switch (key) {
-      case Key.tab:
-        return "\t";
-      case Key.shift("tab"):
-        return "\u001b[Z";
-      case Key.enter:
-        return "\r";
-      case Key.escape:
-        return "\u001b";
-      default:
-        throw new Error(`Unsupported test key: ${key}`);
-    }
+  function renderFormLines(form: SkillForm) {
+    return form.render(80).map((line) => {
+      return line
+        .replaceAll(CURSOR_MARKER, "")
+        .replaceAll("\u001b[7m", "")
+        .replaceAll("\u001b[27m", "");
+    });
   }
 
-  function pressKey(form: SkillForm, key: KeyId) {
-    form.handleInput(getTerminalInputForKey(key));
+  function findLineIndex(lines: string[], text: string) {
+    return lines.findIndex((line) => line.includes(text));
+  }
+
+  function pressKey(form: SkillForm, key: string) {
+    form.handleInput(key);
   }
 
   describe("SkillForm", () => {
-    it("should keep focus on the name field until the value is valid", () => {
-      const { form } = createSkillForm();
-
-      pressKey(form, Key.tab);
-
-      expect(renderForm(form)).toContain("Name is required");
-      expect(renderForm(form)).toContain("› Name");
-      expect(renderForm(form)).not.toContain("› Description");
-
-      enterText(form, "test-skill");
-      pressKey(form, Key.tab);
-
-      expect(renderForm(form)).not.toContain("Name is required");
-      expect(renderForm(form)).toContain("› Description");
-    });
-
-    it("should keep focus on the description field until the value is valid", () => {
-      const { form } = createSkillForm();
-
-      enterText(form, "test-skill");
-      pressKey(form, Key.tab);
-      pressKey(form, Key.shift("tab"));
-
-      expect(renderForm(form)).toContain("Description is required");
-      expect(renderForm(form)).toContain("› Description");
-      expect(renderForm(form)).not.toContain("› Name");
-
-      enterText(form, "Useful skill description");
-      pressKey(form, Key.shift("tab"));
-
-      expect(renderForm(form)).not.toContain("Description is required");
-      expect(renderForm(form)).toContain("› Name");
-    });
-
-    it("should show inline errors and submit only when every field is valid", () => {
+    it("should show errors under both inputs only after an invalid submit", () => {
       const { form, done } = createSkillForm();
 
-      enterText(form, "test-skill");
+      expect(renderForm(form)).not.toContain("Name is required");
+      expect(renderForm(form)).not.toContain("Description is required");
+
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
 
       expect(done).not.toHaveBeenCalled();
-      expect(renderForm(form)).toContain("Description is required");
-      expect(renderForm(form)).toContain("› Description");
 
+      const lines = renderFormLines(form);
+      const nameInputIndex = findLineIndex(lines, ">");
+      const nameErrorIndex = findLineIndex(lines, "× Name is required");
+      const descriptionLabelIndex = findLineIndex(lines, "Description");
+      const descriptionInputIndex = lines.findIndex(
+        (line, index) => index > descriptionLabelIndex && line.includes(">"),
+      );
+      const descriptionErrorIndex = findLineIndex(lines, "× Description is required");
+
+      expect(nameInputIndex).toBeGreaterThan(-1);
+      expect(nameErrorIndex).toBeGreaterThan(nameInputIndex);
+      expect(nameErrorIndex).toBeLessThan(descriptionLabelIndex);
+
+      expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
+      expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
+    });
+
+    it("should submit the entered values with the correct field mapping", () => {
+      const { form, done } = createSkillForm();
+
+      enterText(form, "test-skill");
+      pressKey(form, Key.enter);
       enterText(form, "Useful skill description");
+
+      expect(renderForm(form)).toContain("test-skill");
+      expect(renderForm(form)).toContain("Useful skill description");
+
       pressKey(form, Key.enter);
 
       expect(done).toHaveBeenCalledWith({
         name: "test-skill",
         description: "Useful skill description",
+      });
+      expect(done).not.toHaveBeenCalledWith({
+        name: "Useful skill description",
+        description: "test-skill",
       });
     });
 

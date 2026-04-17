@@ -112,6 +112,7 @@ export class SkillForm extends Container implements Focusable {
   #theme: Theme;
   #tui: TUI;
   #focused = false;
+  #shouldShowValidationErrors = false;
 
   get focused() {
     return this.#focused;
@@ -170,18 +171,18 @@ export class SkillForm extends Container implements Focusable {
     }
 
     if (matchesKey(data, Key.tab) || matchesKey(data, Key.down)) {
-      this.#attemptFieldExit(1);
+      this.#moveFocus(1);
       return;
     }
 
     if (matchesKey(data, Key.shift("tab")) || matchesKey(data, Key.up)) {
-      this.#attemptFieldExit(-1);
+      this.#moveFocus(-1);
       return;
     }
 
     if (matchesKey(data, Key.enter)) {
       if (this.#activeFieldIndex < this.#inputs.length - 1) {
-        this.#attemptFieldExit(1);
+        this.#moveFocus(1);
         return;
       }
 
@@ -190,22 +191,15 @@ export class SkillForm extends Container implements Focusable {
     }
 
     this.#inputs[this.#activeFieldIndex].handleInput(data);
-    this.#validateField(this.#activeFieldIndex, { showError: false });
+    this.#validateField(this.#activeFieldIndex, {
+      showError: this.#shouldShowValidationErrors,
+    });
     this.#tui.requestRender();
   }
 
   override invalidate(): void {
     super.invalidate();
     this.#updateFieldLabels();
-  }
-
-  #attemptFieldExit(direction: 1 | -1) {
-    if (!this.#validateField(this.#activeFieldIndex)) {
-      this.#tui.requestRender();
-      return;
-    }
-
-    this.#moveFocus(direction);
   }
 
   #moveFocus(direction: 1 | -1) {
@@ -218,6 +212,9 @@ export class SkillForm extends Container implements Focusable {
 
   #submit() {
     const values = this.#getValues();
+
+    this.#shouldShowValidationErrors = true;
+
     const firstInvalidFieldIndex = this.#validateAllFields();
 
     if (firstInvalidFieldIndex !== null) {
