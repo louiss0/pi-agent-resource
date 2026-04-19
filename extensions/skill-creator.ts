@@ -14,19 +14,10 @@ import {
   Text,
   type TUI,
 } from "@mariozechner/pi-tui";
-import {
-  maxLength,
-  minLength,
-  object,
-  pipe,
-  regex,
-  safeParse,
-  string,
-  summarize,
-} from "valibot";
+import { maxLength, minLength, pipe, regex, safeParse, string, summarize } from "valibot";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
-  parseSubCommandValuesFromArgument,
+  SubCommands,
 } from "../shared/subcommands";
 
 export default (pi: ExtensionAPI) => {
@@ -44,10 +35,10 @@ export function generateCommandHandlerUsingDeps(
   _dependency: Dependencies,
 ): RegisteredCommand["handler"] {
   return async (arg, ctx) => {
-    const result = parseSubCommandValuesFromArgument(arg);
+    const result = SubCommands.parse(arg);
 
     if (!result.success) {
-      ctx.ui.notify(`Invalid command: ${summarize(result.issues)}`, "error");
+      ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");
       return;
     }
 

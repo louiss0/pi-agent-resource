@@ -11,7 +11,7 @@ vi.mock("@mariozechner/pi-tui", async () => {
   };
 });
 
-import { SUBCOMMANDS } from "../shared/subcommands";
+import { SubCommands } from "../shared/subcommands";
 import { generateCommandHandlerUsingDeps, SkillForm } from "./skill-creator";
 
 describe("Skill Creator", () => {
@@ -169,7 +169,7 @@ describe("Skill Creator", () => {
       );
     });
 
-    it(`should work when ${SUBCOMMANDS.options[0]} is called`, async () => {
+    it(`should work when ${SubCommands.CREATE} is called`, async () => {
       const context = createContext();
 
       vi.mocked(context.ui.custom).mockResolvedValueOnce({
@@ -207,14 +207,14 @@ describe("Skill Creator", () => {
       expect(context.ui.notify).toHaveBeenCalledWith("Skill creation cancelled", "info");
     });
 
-    it(`should work when ${SUBCOMMANDS.options[1]} is called`, async () => {
+    it(`should work when ${SubCommands.EDIT} is called`, async () => {
       const context = createContext();
       await handler("edit", context);
 
       expect(context.ui.notify).toHaveBeenCalledWith("Skill edited successfully");
     });
 
-    it(`should work when ${SUBCOMMANDS.options[2]} is called`, async () => {
+    it(`should work when ${SubCommands.DELETE} is called`, async () => {
       const context = createContext();
       await handler("delete", context);
 
