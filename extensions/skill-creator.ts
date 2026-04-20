@@ -14,7 +14,16 @@ import {
   Text,
   type TUI,
 } from "@mariozechner/pi-tui";
-import { maxLength, minLength, pipe, regex, safeParse, string, summarize } from "valibot";
+import {
+  type InferOutput,
+  maxLength,
+  minLength,
+  object,
+  pipe,
+  regex,
+  safeParse,
+  string,
+} from "valibot";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -55,55 +64,67 @@ export function generateCommandHandlerUsingDeps(
     }
   };
 }
-
-const skillFieldSchemas = {
+const RequiredAgentSkillFieldsSchema = object({
   name: pipe(
     string(),
     minLength(1, "Name is required"),
     regex(/^[a-z0-9-]+$/, "Must be lowercase alphanumeric with dashes only"),
   ),
-  description: pipe(
-    string(),
-    minLength(1, "Description is required"),
-    maxLength(255, "Description must be 255 characters or fewer"),
-  ),
-};
+  description: pipe(string(), minLength(1, "Description is required"), maxLength(255)),
+});
 
-const skillInfoSchema = object(skillFieldSchemas);
+type RequiredAgentSkillFieldsSchema = InferOutput<typeof RequiredAgentSkillFieldsSchema>;
 
-type SkillFormValues = {
-  name: string;
-  description: string;
-};
-
-type SkillFieldName = keyof SkillFormValues;
-
-const skillFieldNames: SkillFieldName[] = ["name", "description"];
-const skillFieldLabels: Record<SkillFieldName, string> = {
-  name: "Name",
-  description: "Description",
-};
-
-function getSkillFieldError(field: SkillFieldName, value: string): string | null {
-  const result = safeParse(skillFieldSchemas[field], value);
-
-  if (result.success) {
-    return null;
+class LabelledInput extends Container {
+  #name: string;
+  #errorText = new Text("");
+  #input = new Input();
+  #labelText: Text;
+  #theme: Theme;
+  constructor(name: string, theme: Theme) {
+    super();
+    this.#name = name;
+    this.#labelText = new Text(name);
+    this.addChild(this.#labelText);
+    this.addChild(this.#input);
+    this.addChild(this.#errorText);
+    this.addChild(new Spacer(1));
+    this.#theme = theme;
   }
 
-  return summarize(result.issues);
+  setError(text: string) {
+    this.#errorText.setText(this.#theme.fg("error", text));
+  }
+
+  setFocused(focused: boolean) {
+    this.#input.focused = focused;
+  }
+
+  setLabelTextPrefix(prefix: string) {
+    this.#labelText.setText(this.#theme.fg("accent", `${prefix}${this.#name}`));
+  }
+
+  get name() {
+    return this.#name;
+  }
+
+  get value() {
+    return this.#input.getValue();
+  }
+
+  handleInput(value: string) {
+    this.#input.handleInput(value);
+  }
 }
 
 export class SkillForm extends Container implements Focusable {
   #activeFieldIndex = 0;
-  #inputs: Input[];
-  #fieldLabels: Text[];
-  #errorLabels: Text[];
-  #done: (value: SkillFormValues | null) => void;
-  #theme: Theme;
+
+  #requiredAgentSkillFieldsKeys = Object.keys(RequiredAgentSkillFieldsSchema.entries);
+  #labelledInputs: LabelledInput[];
+  #done: (value: RequiredAgentSkillFieldsSchema | null) => void;
   #tui: TUI;
   #focused = false;
-  #shouldShowValidationErrors = false;
 
   get focused() {
     return this.#focused;
@@ -115,36 +136,25 @@ export class SkillForm extends Container implements Focusable {
     this.#updateFieldLabels();
   }
 
-  constructor(tui: TUI, theme: Theme, done: (value: SkillFormValues | null) => void) {
+  constructor(
+    tui: TUI,
+    theme: Theme,
+    done: (value: RequiredAgentSkillFieldsSchema | null) => void,
+  ) {
     super();
     this.#done = done;
-    this.#theme = theme;
     this.#tui = tui;
 
-    const nameInput = new Input();
-    const descriptionInput = new Input();
-    const nameLabel = new Text("");
-    const descriptionLabel = new Text("");
-    const nameError = new Text("");
-    const descriptionError = new Text("");
+    this.#labelledInputs = this.#requiredAgentSkillFieldsKeys.map(
+      (label) => new LabelledInput(label, theme),
+    );
 
-    this.#inputs = [nameInput, descriptionInput];
-    this.#fieldLabels = [nameLabel, descriptionLabel];
-    this.#errorLabels = [nameError, descriptionError];
     this.#syncInputFocus();
-    this.#updateFieldLabels();
 
     for (const field of [
-      new Text(theme.fg("accent", "Create skill")),
+      new Text(theme.fg("accent", "Create Skill")),
       new Spacer(1),
-      nameLabel,
-      nameInput,
-      nameError,
-      new Spacer(1),
-      descriptionLabel,
-      descriptionInput,
-      descriptionError,
-      new Spacer(1),
+      ...this.#labelledInputs,
       new Text(theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel")),
     ]) {
       this.addChild(field);
@@ -168,7 +178,7 @@ export class SkillForm extends Container implements Focusable {
     }
 
     if (matchesKey(data, Key.enter)) {
-      if (this.#activeFieldIndex < this.#inputs.length - 1) {
+      if (this.#activeFieldIndex < this.#labelledInputs.length - 1) {
         this.#moveFocus(1);
         return;
       }
@@ -177,8 +187,7 @@ export class SkillForm extends Container implements Focusable {
       return;
     }
 
-    this.#inputs[this.#activeFieldIndex].handleInput(data);
-    this.#validateField(this.#activeFieldIndex, this.#shouldShowValidationErrors);
+    this.#labelledInputs[this.#activeFieldIndex].handleInput(data);
     this.#tui.requestRender();
   }
 
@@ -189,92 +198,55 @@ export class SkillForm extends Container implements Focusable {
 
   #moveFocus(direction: 1 | -1) {
     this.#activeFieldIndex =
-      (this.#activeFieldIndex + direction + this.#inputs.length) % this.#inputs.length;
+      (this.#activeFieldIndex + direction + this.#labelledInputs.length) %
+      this.#labelledInputs.length;
     this.#syncInputFocus();
     this.#updateFieldLabels();
     this.#tui.requestRender();
   }
 
   #submit() {
-    const values = this.#getValues();
+    const result = safeParse(
+      RequiredAgentSkillFieldsSchema,
+      Object.fromEntries(this.#labelledInputs.map((input) => [input.name, input.value])),
+    );
 
-    this.#shouldShowValidationErrors = true;
+    if (!result.success) {
+      this.#labelledInputs.forEach((input) => {
+        const issues = result.issues.filter((issue) => issue.path?.[0].key === input.name);
+        if (issues) {
+          input.setError(issues.map((issue) => issue.message).join("\n"));
+        }
+      });
 
-    const firstInvalidFieldIndex = this.#validateAllFields();
-
-    if (firstInvalidFieldIndex !== undefined) {
-      this.#activeFieldIndex = firstInvalidFieldIndex;
-      this.#syncInputFocus();
-      this.#updateFieldLabels();
       this.#tui.requestRender();
-      return;
+    } else {
+      this.#done(result.output);
     }
-
-    this.#done(values);
-  }
-
-  #getValues(): SkillFormValues {
-    return {
-      name: this.#inputs[0].getValue(),
-      description: this.#inputs[1].getValue(),
-    };
-  }
-
-  #validateAllFields() {
-    let firstInvalidFieldIndex: number | undefined;
-
-    this.#inputs.forEach((_input, index) => {
-      const isValid = this.#validateField(index, true);
-
-      if (!isValid && firstInvalidFieldIndex === undefined) {
-        firstInvalidFieldIndex = index;
-      }
-    });
-
-    return firstInvalidFieldIndex;
-  }
-
-  #validateField(index: number, showError = false) {
-    const field = skillFieldNames[index];
-    const error = getSkillFieldError(field, this.#inputs[index].getValue());
-
-    this.#errorLabels[index].setText(error && showError ? this.#theme.fg("error", error) : "");
-    return error === null;
   }
 
   #syncInputFocus() {
-    this.#inputs?.forEach((input, index) => {
-      input.focused = this.#focused && index === this.#activeFieldIndex;
+    this.#labelledInputs.forEach((input, index) => {
+      input.setFocused(this.#focused && index === this.#activeFieldIndex);
     });
   }
 
   #updateFieldLabels() {
-    this.#fieldLabels?.forEach((label, index) => {
+    this.#labelledInputs.forEach((input, index) => {
       const isActiveField = this.#focused && index === this.#activeFieldIndex;
-      const prefix = isActiveField ? this.#theme.fg("accent", "› ") : "  ";
-      const text = isActiveField
-        ? this.#theme.fg("accent", skillFieldLabels[skillFieldNames[index]])
-        : skillFieldLabels[skillFieldNames[index]];
-
-      label.setText(`${prefix}${text}`);
+      input.setLabelTextPrefix(isActiveField ? "› " : "  ");
     });
   }
 }
 
 async function handleCreate(ctx: ExtensionContext) {
-  const formValues = await ctx.ui.custom<SkillFormValues | null>(
+  const formValues = await ctx.ui.custom<RequiredAgentSkillFieldsSchema | null>(
     (tui, theme, _kb, done) => new SkillForm(tui, theme, done),
     { overlay: true, overlayOptions: { offsetY: -500 } },
   );
 
   if (!formValues) {
     ctx.ui.notify("Skill creation cancelled", "info");
-    return;
-  }
-
-  const result = safeParse(skillInfoSchema, formValues);
-  if (!result.success) {
-    ctx.ui.notify(`Invalid form: ${summarize(result.issues)}`, "error");
     return;
   }
 
