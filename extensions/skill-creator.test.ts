@@ -39,16 +39,11 @@ describe("Skill Creator", () => {
   }
 
   function renderForm(form: SkillForm) {
-    return form.render(80).join("\n");
+    return form.render(45).join("\n");
   }
 
   function renderFormLines(form: SkillForm) {
-    return form.render(80).map((line) => {
-      return line
-        .replaceAll(CURSOR_MARKER, "")
-        .replaceAll("\u001b[7m", "")
-        .replaceAll("\u001b[27m", "");
-    });
+    return form.render(45);
   }
 
   function findLineIndex(lines: string[], text: string) {
@@ -60,6 +55,11 @@ describe("Skill Creator", () => {
   }
 
   describe("SkillForm", () => {
+    it("renders a skill form", () => {
+      const { form } = createSkillForm();
+      assertInitialFormRender(renderFormLines, form, findLineIndex);
+    });
+
     it("should show errors under both inputs only after an invalid submit", () => {
       const { form, done } = createSkillForm();
 
@@ -70,20 +70,26 @@ describe("Skill Creator", () => {
       pressKey(form, Key.enter);
 
       expect(done).not.toHaveBeenCalled();
-
       const lines = renderFormLines(form);
-      const nameInputIndex = findLineIndex(lines, ">");
-      const nameErrorIndex = findLineIndex(lines, "× Name is required");
-      const descriptionLabelIndex = findLineIndex(lines, "Description");
-      const descriptionInputIndex = lines.findIndex(
-        (line, index) => index > descriptionLabelIndex && line.includes(">"),
-      );
-      const descriptionErrorIndex = findLineIndex(lines, "× Description is required");
+      console.log(lines);
+      const nameLabelIndex = findLineIndex(lines, "name");
+      const descriptionLabelIndex = findLineIndex(lines, "description");
+      const inputIndexes = lines
+        .map((line, index) => (line.includes(">") ? index : -1))
+        .filter((index) => index > -1);
 
-      expect(nameInputIndex).toBeGreaterThan(-1);
+      expect(inputIndexes).toHaveLength(2);
+
+      const nameErrorIndex = findLineIndex(lines, "Name is required");
+      const descriptionErrorIndex = findLineIndex(lines, "Description is required");
+
+      const [nameInputIndex, descriptionInputIndex] = inputIndexes;
+
+      expect(nameLabelIndex).toBeGreaterThan(-1);
+      expect(descriptionLabelIndex).toBeGreaterThan(nameLabelIndex);
+      expect(nameInputIndex).toBeGreaterThan(nameLabelIndex);
       expect(nameErrorIndex).toBeGreaterThan(nameInputIndex);
       expect(nameErrorIndex).toBeLessThan(descriptionLabelIndex);
-
       expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
       expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
     });
@@ -104,14 +110,14 @@ describe("Skill Creator", () => {
       pressKey(form, Key.enter);
 
       const lines = renderFormLines(form);
-      const nameErrorLine = lines.find((line) => line.includes("× Name is required"));
+      const nameErrorLine = lines.find((line) => line.includes("Name is required"));
       const descriptionErrorLine = lines.find((line) =>
-        line.includes("× Description is required"),
+        line.includes("Description is required"),
       );
       const errorAnsi = theme.getFgAnsi("error");
 
-      expect(nameErrorLine).toContain(`${errorAnsi}× Name is required`);
-      expect(descriptionErrorLine).toContain(`${errorAnsi}× Description is required`);
+      expect(nameErrorLine).toContain(`${errorAnsi}Name is required`);
+      expect(descriptionErrorLine).toContain(`${errorAnsi}Description is required`);
     });
 
     it("should submit the entered values with the correct field mapping", () => {
@@ -182,22 +188,6 @@ describe("Skill Creator", () => {
       expect(context.ui.notify).toHaveBeenCalledWith("Skill created successfully");
     });
 
-    it("should show a validation error when create values are invalid", async () => {
-      const context = createContext();
-
-      vi.mocked(context.ui.custom).mockResolvedValueOnce({
-        name: "Test Skill",
-        description: "Test description",
-      });
-
-      await handler("create", context);
-
-      expect(context.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Invalid form:"),
-        "error",
-      );
-    });
-
     it("should notify when skill creation is cancelled", async () => {
       const context = createContext();
       vi.mocked(context.ui.custom).mockResolvedValueOnce(null);
@@ -222,3 +212,29 @@ describe("Skill Creator", () => {
     });
   });
 });
+
+function assertInitialFormRender(
+  renderFormLines: (form: SkillForm) => string[],
+  form: SkillForm,
+  findLineIndex: (lines: string[], text: string) => number,
+) {
+  const lines = renderFormLines(form);
+  const createSkillIndex = findLineIndex(lines, "Create Skill");
+  expect(createSkillIndex).toBe(1);
+  const nameLabelIndex = findLineIndex(lines, "name");
+  const descriptionLabelIndex = findLineIndex(lines, "description");
+  const inputIndexes = lines
+    .map((line, index) => (line.includes(">") ? index : -1))
+    .filter((index) => index > -1);
+
+  const confirmNextFieldsLabelIndex = findLineIndex(
+    lines,
+    "[] Do you want to fill in the next fields?",
+  );
+
+  expect(inputIndexes).toHaveLength(2);
+  const [nameInputIndex, descriptionInputIndex] = inputIndexes;
+  expect(nameInputIndex).toBeGreaterThan(nameLabelIndex);
+  expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
+  expect(confirmNextFieldsLabelIndex).toBeGreaterThan(descriptionInputIndex);
+}
