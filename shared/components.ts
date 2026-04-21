@@ -30,7 +30,7 @@ export class LabelledInput extends Container {
     this.#theme = theme;
   }
 
-  setError(messages: string[]) {
+  setError(...messages: string[]) {
     this.#errorText.setText(
       messages.map((message) => this.#theme.fg("error", message)).join("\n"),
     );
@@ -60,18 +60,6 @@ export class LabelledInput extends Container {
     this.#input.handleInput(value);
   }
 }
-
-export type FormField = Component & {
-  setFocused: (focused: boolean) => void;
-  handleInput: (data: string) => void;
-};
-
-type FormProps = {
-  tui: TUI;
-  fields: FormField[];
-  onSubmit?: () => void;
-  onCancel?: () => void;
-};
 
 export class ConfirmationBox implements Component {
   #confirmed = false;
@@ -118,6 +106,18 @@ export class ConfirmationBox implements Component {
 
   invalidate(): void {}
 }
+
+export type FormField = Component & {
+  setFocused: (focused: boolean) => void;
+  handleInput: (data: string) => void;
+};
+
+type FormProps = {
+  tui: TUI;
+  fields: FormField[];
+  onSubmit?: () => void;
+  onCancel?: () => void;
+};
 
 export class Form extends Container implements Focusable {
   #activeFieldIndex = 0;
@@ -172,7 +172,8 @@ export class Form extends Container implements Focusable {
 
   #moveFocus(direction: 1 | -1) {
     this.#activeFieldIndex =
-      (this.#activeFieldIndex + direction + this.props.fields.length) % this.props.fields.length;
+      (this.#activeFieldIndex + direction + this.props.fields.length) %
+      this.props.fields.length;
     this.#syncFieldFocus();
     this.props.tui.requestRender();
   }

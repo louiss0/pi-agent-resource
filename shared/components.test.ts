@@ -11,7 +11,7 @@ vi.mock("@mariozechner/pi-tui", async () => {
   };
 });
 
-import { ConfirmationBox, Form, LabelledInput, type FormField } from "./components";
+import { ConfirmationBox, Form, type FormField, LabelledInput } from "./components";
 
 describe("shared/components", () => {
   class TestField extends Container implements FormField {
@@ -56,7 +56,7 @@ describe("shared/components", () => {
       input.handleInput("e");
       input.handleInput("s");
       input.handleInput("t");
-      input.setError(["Name is required", "Must be lowercase"]);
+      input.setError("Name is required", "Must be lowercase");
 
       const lines = input.render(45).join("\n");
 
@@ -69,7 +69,7 @@ describe("shared/components", () => {
     it("clears error messages", () => {
       const input = new LabelledInput("description", createTheme());
 
-      input.setError(["Description is required"]);
+      input.setError("Description is required");
       input.clearError();
 
       expect(input.render(45).join("\n")).not.toContain("Description is required");
@@ -80,7 +80,9 @@ describe("shared/components", () => {
     it("renders unchecked by default", () => {
       const checkbox = new ConfirmationBox(createTui());
 
-      expect(checkbox.render(45).join("\n")).toContain("[ ] Do you want to fill in the next fields?");
+      expect(checkbox.render(45).join("\n")).toContain(
+        "[ ] Do you want to fill in the next fields?",
+      );
     });
 
     it("renders the focused prefix when focused", () => {
@@ -88,7 +90,9 @@ describe("shared/components", () => {
 
       checkbox.setFocused(true);
 
-      expect(checkbox.render(45).join("\n")).toContain("> [ ] Do you want to fill in the next fields?");
+      expect(checkbox.render(45).join("\n")).toContain(
+        "> [ ] Do you want to fill in the next fields?",
+      );
     });
 
     it("toggles to confirmed when space is pressed", () => {
@@ -111,7 +115,9 @@ describe("shared/components", () => {
       checkbox.handleInput(Key.space);
       checkbox.handleInput(Key.space);
 
-      expect(checkbox.render(45).join("\n")).toContain("[ ] Do you want to fill in the next fields?");
+      expect(checkbox.render(45).join("\n")).toContain(
+        "[ ] Do you want to fill in the next fields?",
+      );
       expect(tui.requestRender).toHaveBeenCalledTimes(2);
     });
 
@@ -122,7 +128,9 @@ describe("shared/components", () => {
       checkbox.confirm();
       checkbox.confirm();
 
-      expect(checkbox.render(45).join("\n")).toContain("[x] Do you want to fill in the next fields?");
+      expect(checkbox.render(45).join("\n")).toContain(
+        "[x] Do you want to fill in the next fields?",
+      );
       expect(tui.requestRender).toHaveBeenCalledTimes(1);
     });
   });
