@@ -6,12 +6,14 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import {
   Container,
+  type Component,
   type Focusable,
   Input,
   Key,
   matchesKey,
   Spacer,
   Text,
+  truncateToWidth,
   type TUI,
 } from "@mariozechner/pi-tui";
 import {
@@ -81,6 +83,7 @@ class LabelledInput extends Container {
   #input = new Input();
   #labelText: Text;
   #theme: Theme;
+
   constructor(name: string, theme: Theme) {
     super();
     this.#name = name;
@@ -92,8 +95,12 @@ class LabelledInput extends Container {
     this.#theme = theme;
   }
 
-  setError(text: string) {
-    this.#errorText.setText(this.#theme.fg("error", text));
+  setError(messages: string[]) {
+    this.#errorText.setText(messages.map((message) => this.#theme.fg("error", message)).join("\n"));
+  }
+
+  clearError() {
+    this.#errorText.setText("");
   }
 
   setFocused(focused: boolean) {
@@ -117,11 +124,59 @@ class LabelledInput extends Container {
   }
 }
 
+type ConfirmationBoxProps = {
+  onChange?: (confirmed: boolean) => void;
+};
+
+class ConfirmationBox implements Component {
+  #confirmed = false;
+  #focused = false;
+
+  constructor(private props: ConfirmationBoxProps = {}) {}
+
+  get confirmed() {
+    return this.#confirmed;
+  }
+
+  setFocused(focused: boolean) {
+    this.#focused = focused;
+  }
+
+  confirm() {
+    if (this.#confirmed) {
+      return;
+    }
+
+    this.#confirmed = true;
+    this.props.onChange?.(this.#confirmed);
+  }
+
+  toggle() {
+    this.#confirmed = !this.#confirmed;
+    this.props.onChange?.(this.#confirmed);
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.space) || matchesKey(data, Key.enter)) {
+      this.toggle();
+    }
+  }
+
+  render(width: number): string[] {
+    const box = this.#confirmed ? "[x]" : "[]";
+    const prefix = this.#focused ? "> " : "  ";
+    return [truncateToWidth(`${prefix}${box} Do you want to fill in the next fields?`, width)];
+  }
+
+  invalidate(): void {}
+}
+
 export class SkillForm extends Container implements Focusable {
   #activeFieldIndex = 0;
 
   #requiredAgentSkillFieldsKeys = Object.keys(RequiredAgentSkillFieldsSchema.entries);
   #labelledInputs: LabelledInput[];
+  #confirmationBox: ConfirmationBox;
   #done: (value: RequiredAgentSkillFieldsSchema | null) => void;
   #tui: TUI;
   #focused = false;
@@ -148,6 +203,11 @@ export class SkillForm extends Container implements Focusable {
     this.#labelledInputs = this.#requiredAgentSkillFieldsKeys.map(
       (label) => new LabelledInput(label, theme),
     );
+    this.#confirmationBox = new ConfirmationBox({
+      onChange: () => {
+        this.#tui.requestRender();
+      },
+    });
 
     this.#syncInputFocus();
 
@@ -155,7 +215,9 @@ export class SkillForm extends Container implements Focusable {
       new Text(theme.fg("accent", "Create Skill")),
       new Spacer(1),
       ...this.#labelledInputs,
-      new Text(theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel")),
+      this.#confirmationBox,
+      new Spacer(1),
+      new Text(theme.fg("dim", "Enter next/submit • Tab switch field • Enter confirm • Esc cancel")),
     ]) {
       this.addChild(field);
     }
@@ -177,17 +239,33 @@ export class SkillForm extends Container implements Focusable {
       return;
     }
 
-    if (matchesKey(data, Key.enter)) {
-      if (this.#activeFieldIndex < this.#labelledInputs.length - 1) {
-        this.#moveFocus(1);
-        return;
+    if (this.#activeFieldIndex === this.#labelledInputs.length) {
+      if (matchesKey(data, Key.space)) {
+        this.#confirmationBox.handleInput(data);
+        this.#tui.requestRender();
       }
 
-      this.#submit();
+      if (matchesKey(data, Key.enter)) {
+        if (!this.#confirmationBox.confirmed) {
+          this.#confirmationBox.confirm();
+          this.#tui.requestRender();
+          return;
+        }
+
+        this.#submit();
+      }
+
       return;
     }
 
-    this.#labelledInputs[this.#activeFieldIndex].handleInput(data);
+    if (matchesKey(data, Key.enter)) {
+      this.#moveFocus(1);
+      return;
+    }
+
+    const activeInput = this.#labelledInputs[this.#activeFieldIndex];
+    activeInput.handleInput(data);
+    this.#validateField(activeInput);
     this.#tui.requestRender();
   }
 
@@ -198,37 +276,78 @@ export class SkillForm extends Container implements Focusable {
 
   #moveFocus(direction: 1 | -1) {
     this.#activeFieldIndex =
-      (this.#activeFieldIndex + direction + this.#labelledInputs.length) %
-      this.#labelledInputs.length;
+      (this.#activeFieldIndex + direction + this.#focusableFieldCount) %
+      this.#focusableFieldCount;
     this.#syncInputFocus();
     this.#updateFieldLabels();
     this.#tui.requestRender();
   }
 
+  get #focusableFieldCount() {
+    return this.#labelledInputs.length + 1;
+  }
+
   #submit() {
-    const result = safeParse(
-      RequiredAgentSkillFieldsSchema,
-      Object.fromEntries(this.#labelledInputs.map((input) => [input.name, input.value])),
-    );
+    if (!this.#confirmationBox.confirmed) {
+      this.#tui.requestRender();
+      return;
+    }
+
+    const values = this.#getValues();
+    const result = safeParse(RequiredAgentSkillFieldsSchema, values);
 
     if (!result.success) {
       this.#labelledInputs.forEach((input) => {
-        const issues = result.issues.filter((issue) => issue.path?.[0].key === input.name);
-        if (issues) {
-          input.setError(issues.map((issue) => issue.message).join("\n"));
+        const messages = result.issues
+          .filter((issue) => issue.path?.[0].key === input.name)
+          .map((issue) => issue.message);
+
+        if (messages.length > 0) {
+          input.setError(messages);
+          return;
         }
+
+        input.clearError();
       });
 
       this.#tui.requestRender();
-    } else {
-      this.#done(result.output);
+      return;
     }
+
+    this.#done(result.output);
+  }
+
+  #getValues() {
+    return Object.fromEntries(this.#labelledInputs.map((input) => [input.name, input.value]));
+  }
+
+  #validateField(input: LabelledInput) {
+    const result = safeParse(RequiredAgentSkillFieldsSchema, this.#getValues());
+
+    if (result.success) {
+      input.clearError();
+      return;
+    }
+
+    const messages = result.issues
+      .filter((issue) => issue.path?.[0].key === input.name)
+      .map((issue) => issue.message);
+
+    if (messages.length > 0) {
+      input.setError(messages);
+      return;
+    }
+
+    input.clearError();
   }
 
   #syncInputFocus() {
     this.#labelledInputs.forEach((input, index) => {
       input.setFocused(this.#focused && index === this.#activeFieldIndex);
     });
+    this.#confirmationBox.setFocused(
+      this.#focused && this.#activeFieldIndex === this.#labelledInputs.length,
+    );
   }
 
   #updateFieldLabels() {
