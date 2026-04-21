@@ -126,15 +126,13 @@ class LabelledInput extends Container {
   }
 }
 
-type ConfirmationBoxProps = {
-  onChange?: (confirmed: boolean) => void;
-};
-
 class ConfirmationBox implements Component {
   #confirmed = false;
   #focused = false;
-
-  constructor(private props: ConfirmationBoxProps = {}) {}
+  #tui: TUI;
+  constructor(tui: TUI) {
+    this.#tui = tui;
+  }
 
   get confirmed() {
     return this.#confirmed;
@@ -150,22 +148,22 @@ class ConfirmationBox implements Component {
     }
 
     this.#confirmed = true;
-    this.props.onChange?.(this.#confirmed);
+    this.#tui.requestRender();
   }
 
   toggle() {
     this.#confirmed = !this.#confirmed;
-    this.props.onChange?.(this.#confirmed);
+    this.#tui.requestRender();
   }
 
   handleInput(data: string): void {
-    if (matchesKey(data, Key.space) || matchesKey(data, Key.enter)) {
+    if (matchesKey(data, Key.space)) {
       this.toggle();
     }
   }
 
   render(width: number): string[] {
-    const box = this.#confirmed ? "[x]" : "[]";
+    const box = this.#confirmed ? "[x]" : "[ ]";
     const prefix = this.#focused ? "> " : "  ";
     return [truncateToWidth(`${prefix}${box} Do you want to fill in the next fields?`, width)];
   }
@@ -205,11 +203,7 @@ export class SkillForm extends Container implements Focusable {
     this.#labelledInputs = this.#requiredAgentSkillFieldsKeys.map(
       (label) => new LabelledInput(label, theme),
     );
-    this.#confirmationBox = new ConfirmationBox({
-      onChange: () => {
-        this.#tui.requestRender();
-      },
-    });
+    this.#confirmationBox = new ConfirmationBox(tui);
 
     this.#syncInputFocus();
 
@@ -219,9 +213,7 @@ export class SkillForm extends Container implements Focusable {
       ...this.#labelledInputs,
       this.#confirmationBox,
       new Spacer(1),
-      new Text(
-        theme.fg("dim", "Enter next/submit • Tab switch field • Enter confirm • Esc cancel"),
-      ),
+      new Text(theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel")),
     ]) {
       this.addChild(field);
     }
@@ -243,20 +235,14 @@ export class SkillForm extends Container implements Focusable {
       return;
     }
 
-    if (this.#activeFieldIndex === this.#labelledInputs.length) {
+    if (this.#activeFieldIndex >= this.#labelledInputs.length) {
       if (matchesKey(data, Key.space)) {
         this.#confirmationBox.handleInput(data);
-        this.#tui.requestRender();
       }
 
       if (matchesKey(data, Key.enter)) {
-        if (!this.#confirmationBox.confirmed) {
-          this.#confirmationBox.confirm();
-          this.#tui.requestRender();
-          return;
-        }
-
         this.#submit();
+        this.#tui.requestRender();
       }
 
       return;
@@ -292,11 +278,6 @@ export class SkillForm extends Container implements Focusable {
   }
 
   #submit() {
-    if (!this.#confirmationBox.confirmed) {
-      this.#tui.requestRender();
-      return;
-    }
-
     const values = this.#getValues();
     const result = safeParse(RequiredAgentSkillFieldsSchema, values);
 

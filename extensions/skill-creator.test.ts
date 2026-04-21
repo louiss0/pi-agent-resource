@@ -18,7 +18,7 @@ describe("Skill Creator", () => {
   function createSkillForm(themeOverride?: Theme) {
     const done = vi.fn();
     const tui = {
-     requestRender: vi.fn(),
+      requestRender: vi.fn(),
     } as unknown as TUI;
     const theme =
       themeOverride ??
@@ -69,7 +69,6 @@ describe("Skill Creator", () => {
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
-      pressKey(form, Key.enter);
 
       expect(done).not.toHaveBeenCalled();
       const lines = renderFormLines(form);
@@ -85,7 +84,6 @@ describe("Skill Creator", () => {
       const descriptionErrorIndex = findLineIndex(lines, "Description is required");
 
       const [nameInputIndex, descriptionInputIndex] = inputIndexes;
-
       expect(nameLabelIndex).toBeGreaterThan(-1);
       expect(descriptionLabelIndex).toBeGreaterThan(nameLabelIndex);
       expect(nameInputIndex).toBeGreaterThan(nameLabelIndex);
@@ -93,7 +91,7 @@ describe("Skill Creator", () => {
       expect(nameErrorIndex).toBeLessThan(descriptionLabelIndex);
       expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
       expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
-      expect(renderForm(form)).toContain("[x] Do you want to fill in the next fields?");
+      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
     });
 
     it("should render validation errors using the error theme color", () => {
@@ -108,7 +106,6 @@ describe("Skill Creator", () => {
       );
       const { form } = createSkillForm(theme);
 
-      pressKey(form, Key.enter);
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
@@ -136,7 +133,6 @@ describe("Skill Creator", () => {
 
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
-      pressKey(form, Key.enter);
 
       expect(done).toHaveBeenCalledWith({
         name: "test-skill",
@@ -151,11 +147,20 @@ describe("Skill Creator", () => {
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
-      pressKey(form, Key.enter);
 
       expect(done).not.toHaveBeenCalled();
       expect(renderForm(form)).not.toContain("Name is required");
       expect(renderForm(form)).toContain("Description is required");
+      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
+    });
+
+    it("should mark the confirmation box when space is pressed", () => {
+      const { form } = createSkillForm();
+
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.space);
+
       expect(renderForm(form)).toContain("[x] Do you want to fill in the next fields?");
     });
 
@@ -250,7 +255,7 @@ function assertInitialFormRender(
 
   const confirmNextFieldsLabelIndex = findLineIndex(
     lines,
-    "[] Do you want to fill in the next fields?",
+    "[ ] Do you want to fill in the next fields?",
   );
 
   expect(inputIndexes).toHaveLength(2);
