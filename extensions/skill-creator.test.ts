@@ -18,7 +18,7 @@ describe("Skill Creator", () => {
   function createSkillForm(themeOverride?: Theme) {
     const done = vi.fn();
     const tui = {
-      requestRender: vi.fn(),
+     requestRender: vi.fn(),
     } as unknown as TUI;
     const theme =
       themeOverride ??
