@@ -1,5 +1,5 @@
 import { Theme } from "@mariozechner/pi-coding-agent";
-import { Key, type TUI } from "@mariozechner/pi-tui";
+import { Container, Key, Text, type TUI } from "@mariozechner/pi-tui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module =
@@ -11,9 +11,29 @@ vi.mock("@mariozechner/pi-tui", async () => {
   };
 });
 
-import { ConfirmationBox, LabelledInput } from "./components";
+import { ConfirmationBox, Form, LabelledInput, type FormField } from "./components";
 
 describe("shared/components", () => {
+  class TestField extends Container implements FormField {
+    inputs: string[] = [];
+    focusedStates: boolean[] = [];
+    focused = false;
+
+    constructor(private label: string) {
+      super();
+      this.addChild(new Text(label));
+    }
+
+    setFocused(focused: boolean) {
+      this.focused = focused;
+      this.focusedStates.push(focused);
+    }
+
+    handleInput(data: string) {
+      this.inputs.push(data);
+    }
+  }
+
   function createTheme() {
     return {
       fg: (_color: string, text: string) => text,
@@ -104,6 +124,88 @@ describe("shared/components", () => {
 
       expect(checkbox.render(45).join("\n")).toContain("[x] Do you want to fill in the next fields?");
       expect(tui.requestRender).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Form", () => {
+    function createForm() {
+      const tui = createTui();
+      const firstField = new TestField("first");
+      const secondField = new TestField("second");
+      const onSubmit = vi.fn();
+      const onCancel = vi.fn();
+      const form = new Form({
+        tui,
+        fields: [firstField, secondField],
+        onSubmit,
+        onCancel,
+      });
+
+      form.focused = true;
+
+      return { form, tui, firstField, secondField, onSubmit, onCancel };
+    }
+
+    it("focuses the first field when the form becomes focused", () => {
+      const { firstField, secondField } = createForm();
+
+      expect(firstField.focused).toBe(true);
+      expect(secondField.focused).toBe(false);
+    });
+
+    it("delegates regular input to the active field", () => {
+      const { form, firstField, secondField } = createForm();
+
+      form.handleInput("a");
+
+      expect(firstField.inputs).toEqual(["a"]);
+      expect(secondField.inputs).toEqual([]);
+    });
+
+    it("moves focus forward on enter and tab", () => {
+      const { form, firstField, secondField, tui } = createForm();
+
+      form.handleInput(Key.enter);
+
+      expect(firstField.focused).toBe(false);
+      expect(secondField.focused).toBe(true);
+
+      form.handleInput(Key.tab);
+
+      expect(firstField.focused).toBe(true);
+      expect(secondField.focused).toBe(false);
+      expect(tui.requestRender).toHaveBeenCalled();
+    });
+
+    it("moves focus backward on shift tab and up", () => {
+      const { form, firstField, secondField } = createForm();
+
+      form.handleInput(Key.tab);
+      form.handleInput(Key.shift("tab"));
+      expect(firstField.focused).toBe(true);
+      expect(secondField.focused).toBe(false);
+
+      form.handleInput(Key.down);
+      form.handleInput(Key.up);
+      expect(firstField.focused).toBe(true);
+      expect(secondField.focused).toBe(false);
+    });
+
+    it("submits when enter is pressed on the last field", () => {
+      const { form, onSubmit } = createForm();
+
+      form.handleInput(Key.tab);
+      form.handleInput(Key.enter);
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels on escape", () => {
+      const { form, onCancel } = createForm();
+
+      form.handleInput(Key.escape);
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
     });
   });
 });

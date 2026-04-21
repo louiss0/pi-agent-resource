@@ -2,6 +2,7 @@ import type { Theme } from "@mariozechner/pi-coding-agent";
 import {
   type Component,
   Container,
+  type Focusable,
   Input,
   Key,
   matchesKey,
@@ -60,6 +61,18 @@ export class LabelledInput extends Container {
   }
 }
 
+export type FormField = Component & {
+  setFocused: (focused: boolean) => void;
+  handleInput: (data: string) => void;
+};
+
+type FormProps = {
+  tui: TUI;
+  fields: FormField[];
+  onSubmit?: () => void;
+  onCancel?: () => void;
+};
+
 export class ConfirmationBox implements Component {
   #confirmed = false;
   #focused = false;
@@ -104,4 +117,69 @@ export class ConfirmationBox implements Component {
   }
 
   invalidate(): void {}
+}
+
+export class Form extends Container implements Focusable {
+  #activeFieldIndex = 0;
+  #focused = false;
+
+  constructor(private props: FormProps) {
+    super();
+
+    for (const field of props.fields) {
+      this.addChild(field);
+    }
+  }
+
+  get focused() {
+    return this.#focused;
+  }
+
+  set focused(value: boolean) {
+    this.#focused = value;
+    this.#syncFieldFocus();
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.escape)) {
+      this.props.onCancel?.();
+      return;
+    }
+
+    if (matchesKey(data, Key.tab) || matchesKey(data, Key.down)) {
+      this.#moveFocus(1);
+      return;
+    }
+
+    if (matchesKey(data, Key.shift("tab")) || matchesKey(data, Key.up)) {
+      this.#moveFocus(-1);
+      return;
+    }
+
+    if (matchesKey(data, Key.enter)) {
+      if (this.#activeFieldIndex === this.props.fields.length - 1) {
+        this.props.onSubmit?.();
+        return;
+      }
+
+      this.#moveFocus(1);
+      return;
+    }
+
+    this.props.fields[this.#activeFieldIndex]?.handleInput(data);
+    this.props.tui.requestRender();
+  }
+
+  #moveFocus(direction: 1 | -1) {
+    this.#activeFieldIndex =
+      (this.#activeFieldIndex + direction + this.props.fields.length) % this.props.fields.length;
+    this.#syncFieldFocus();
+    this.props.tui.requestRender();
+  }
+
+  #syncFieldFocus() {
+    this.props.fields.forEach((field, index) => {
+      field.setFocused(this.#focused && index === this.#activeFieldIndex);
+    });
+  }
 }
