@@ -68,17 +68,18 @@ describe("Skill Creator", () => {
 
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
 
       expect(done).not.toHaveBeenCalled();
       const lines = renderFormLines(form);
-      console.log(lines);
       const nameLabelIndex = findLineIndex(lines, "name");
       const descriptionLabelIndex = findLineIndex(lines, "description");
       const inputIndexes = lines
         .map((line, index) => (line.includes(">") ? index : -1))
         .filter((index) => index > -1);
 
-      expect(inputIndexes).toHaveLength(2);
+      expect(inputIndexes).toHaveLength(3);
 
       const nameErrorIndex = findLineIndex(lines, "Name is required");
       const descriptionErrorIndex = findLineIndex(lines, "Description is required");
@@ -92,6 +93,7 @@ describe("Skill Creator", () => {
       expect(nameErrorIndex).toBeLessThan(descriptionLabelIndex);
       expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
       expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
+      expect(renderForm(form)).toContain("[x] Do you want to fill in the next fields?");
     });
 
     it("should render validation errors using the error theme color", () => {
@@ -106,6 +108,8 @@ describe("Skill Creator", () => {
       );
       const { form } = createSkillForm(theme);
 
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
 
@@ -131,11 +135,28 @@ describe("Skill Creator", () => {
       expect(renderForm(form)).toContain("Useful skill description");
 
       pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
 
       expect(done).toHaveBeenCalledWith({
         name: "test-skill",
         description: "Useful skill description",
       });
+    });
+
+    it("should show an error only for the missing description when the name is valid", () => {
+      const { form, done } = createSkillForm();
+
+      enterText(form, "test-skill");
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+
+      expect(done).not.toHaveBeenCalled();
+      expect(renderForm(form)).not.toContain("Name is required");
+      expect(renderForm(form)).toContain("Description is required");
+      expect(renderForm(form)).toContain("[x] Do you want to fill in the next fields?");
     });
 
     it("should allow cancelling even when the active field is invalid", () => {
