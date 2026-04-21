@@ -63,6 +63,14 @@ describe("shared/components", () => {
       expect(checkbox.render(45).join("\n")).toContain("[ ] Do you want to fill in the next fields?");
     });
 
+    it("renders the focused prefix when focused", () => {
+      const checkbox = new ConfirmationBox(createTui());
+
+      checkbox.setFocused(true);
+
+      expect(checkbox.render(45).join("\n")).toContain("> [ ] Do you want to fill in the next fields?");
+    });
+
     it("toggles to confirmed when space is pressed", () => {
       const tui = createTui();
       const checkbox = new ConfirmationBox(tui);
@@ -73,7 +81,29 @@ describe("shared/components", () => {
       const lines = checkbox.render(45).join("\n");
 
       expect(lines).toContain("> [x] Do you want to fill in the next fields?");
-      expect(tui.requestRender).toHaveBeenCalled();
+      expect(tui.requestRender).toHaveBeenCalledTimes(1);
+    });
+
+    it("toggles back to unchecked when space is pressed twice", () => {
+      const tui = createTui();
+      const checkbox = new ConfirmationBox(tui);
+
+      checkbox.handleInput(Key.space);
+      checkbox.handleInput(Key.space);
+
+      expect(checkbox.render(45).join("\n")).toContain("[ ] Do you want to fill in the next fields?");
+      expect(tui.requestRender).toHaveBeenCalledTimes(2);
+    });
+
+    it("confirms the box without toggling it back off", () => {
+      const tui = createTui();
+      const checkbox = new ConfirmationBox(tui);
+
+      checkbox.confirm();
+      checkbox.confirm();
+
+      expect(checkbox.render(45).join("\n")).toContain("[x] Do you want to fill in the next fields?");
+      expect(tui.requestRender).toHaveBeenCalledTimes(1);
     });
   });
 });
