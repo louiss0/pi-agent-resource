@@ -5,16 +5,16 @@ import type {
   Theme,
 } from "@mariozechner/pi-coding-agent";
 import {
-  Container,
   type Component,
+  Container,
   type Focusable,
   Input,
   Key,
   matchesKey,
   Spacer,
   Text,
-  truncateToWidth,
   type TUI,
+  truncateToWidth,
 } from "@mariozechner/pi-tui";
 import {
   type InferOutput,
@@ -96,7 +96,9 @@ class LabelledInput extends Container {
   }
 
   setError(messages: string[]) {
-    this.#errorText.setText(messages.map((message) => this.#theme.fg("error", message)).join("\n"));
+    this.#errorText.setText(
+      messages.map((message) => this.#theme.fg("error", message)).join("\n"),
+    );
   }
 
   clearError() {
@@ -217,7 +219,9 @@ export class SkillForm extends Container implements Focusable {
       ...this.#labelledInputs,
       this.#confirmationBox,
       new Spacer(1),
-      new Text(theme.fg("dim", "Enter next/submit • Tab switch field • Enter confirm • Esc cancel")),
+      new Text(
+        theme.fg("dim", "Enter next/submit • Tab switch field • Enter confirm • Esc cancel"),
+      ),
     ]) {
       this.addChild(field);
     }
