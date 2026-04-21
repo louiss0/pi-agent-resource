@@ -4,7 +4,15 @@ import type {
   RegisteredCommand,
   Theme,
 } from "@mariozechner/pi-coding-agent";
-import { Container, type Focusable, Key, matchesKey, Spacer, Text, type TUI } from "@mariozechner/pi-tui";
+import {
+  Container,
+  type Focusable,
+  Key,
+  matchesKey,
+  Spacer,
+  Text,
+  type TUI,
+} from "@mariozechner/pi-tui";
 import {
   type InferOutput,
   maxLength,
@@ -184,7 +192,7 @@ export class SkillForm extends Container implements Focusable {
           .map((issue) => issue.message);
 
         if (messages.length > 0) {
-          input.setError(messages);
+          input.setError(...messages);
           return;
         }
 
@@ -215,7 +223,7 @@ export class SkillForm extends Container implements Focusable {
       .map((issue) => issue.message);
 
     if (messages.length > 0) {
-      input.setError(messages);
+      input.setError(...messages);
       return;
     }
 
