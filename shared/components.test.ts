@@ -136,33 +136,84 @@ describe("shared/components", () => {
   });
 
   describe("Form", () => {
-    function createForm() {
+    function createForm(
+      title: string,
+      fields: FormField[],
+      footer = "",
+      spacing?: number,
+    ) {
       const tui = createTui();
-      const firstField = new TestField("first");
-      const secondField = new TestField("second");
-      const onSubmit = vi.fn();
-      const onCancel = vi.fn();
-      const form = new Form({
-        tui,
-        fields: [firstField, secondField],
-        onSubmit,
-        onCancel,
+      const done = vi.fn();
+      const form = new Form(tui, done, {
+        title,
+        fields,
+        footer,
+        spacing,
       });
 
       form.focused = true;
 
-      return { form, tui, firstField, secondField, onSubmit, onCancel };
+      return { form, tui, done };
     }
 
+    it("renders the title centered", () => {
+      const { form } = createForm("Title", []);
+
+      const lines = form.render(45);
+      const firstLine = lines[0];
+
+      expect(firstLine).toContain("Title");
+
+      const centeredTextRegex = /\s+\S+\s+/;
+      expect(firstLine).toMatch(centeredTextRegex);
+    });
+
+    it("renders the footer", () => {
+      const { form } = createForm("Title", [], "Footer");
+
+      const lines = form.render(45);
+
+      expect(lines.at(-1)).toContain("Footer");
+    });
+
+    it("renders the default spacing between all children", () => {
+      const { form } = createForm(
+        "Title",
+        [new TestField("field-1"), new TestField("field-2")],
+        "Footer",
+      );
+
+      const lines = form.render(45);
+      const emptyLineCount = lines.filter((line) => line === "").length;
+
+      expect(emptyLineCount).toBe(6);
+    });
+
+    it("renders custom spacing between all children", () => {
+      const { form } = createForm(
+        "Title",
+        [new TestField("field-1"), new TestField("field-2")],
+        "Footer",
+        1,
+      );
+
+      const lines = form.render(45);
+      const emptyLineCount = lines.filter((line) => line === "").length;
+
+      expect(emptyLineCount).toBe(3);
+    });
+
     it("focuses the first field when the form becomes focused", () => {
-      const { firstField, secondField } = createForm();
+      const firstField = new TestField("");
+      const { form } = createForm("Title", [firstField]);
 
       expect(firstField.focused).toBe(true);
-      expect(secondField.focused).toBe(false);
     });
 
     it("delegates regular input to the active field", () => {
-      const { form, firstField, secondField } = createForm();
+      const firstField = new TestField("");
+      const secondField = new TestField("");
+      const { form } = createForm("Title", [firstField, secondField]);
 
       form.handleInput("a");
 
@@ -171,7 +222,10 @@ describe("shared/components", () => {
     });
 
     it("moves focus forward on enter and tab", () => {
-      const { form, firstField, secondField, tui } = createForm();
+      const firstField = new TestField("");
+      const secondField = new TestField("");
+
+      const { form, tui } = createForm("Title", [firstField, secondField]);
 
       form.handleInput(Key.enter);
 
@@ -186,7 +240,10 @@ describe("shared/components", () => {
     });
 
     it("moves focus backward on shift tab and up", () => {
-      const { form, firstField, secondField } = createForm();
+      const firstField = new TestField("");
+      const secondField = new TestField("");
+
+      const { form } = createForm("Title", [firstField, secondField]);
 
       form.handleInput(Key.tab);
       form.handleInput(Key.shift("tab"));
@@ -200,20 +257,23 @@ describe("shared/components", () => {
     });
 
     it("submits when enter is pressed on the last field", () => {
-      const { form, onSubmit } = createForm();
+      const { form, done } = createForm("Title", [new TestField("")]);
 
       form.handleInput(Key.tab);
       form.handleInput(Key.enter);
 
-      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(done).toHaveBeenCalledTimes(1);
+
+      expect(done).not.toHaveBeenCalledWith(null);
     });
 
     it("cancels on escape", () => {
-      const { form, onCancel } = createForm();
+      const { form, done } = createForm("Title", [new TestField("")]);
 
       form.handleInput(Key.escape);
 
-      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(done).toHaveBeenCalledTimes(1);
+      expect(done).toHaveBeenCalledWith(null);
     });
   });
 });

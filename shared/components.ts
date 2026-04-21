@@ -112,23 +112,51 @@ export type FormField = Component & {
   handleInput: (data: string) => void;
 };
 
-type FormProps = {
-  tui: TUI;
+type FormOptions = {
+  title: string;
   fields: FormField[];
-  onSubmit?: () => void;
-  onCancel?: () => void;
+  footer?: string;
+  spacing?: number;
 };
 
 export class Form extends Container implements Focusable {
   #activeFieldIndex = 0;
   #focused = false;
+  #fields: FormField[];
+  #titleText: Text;
+  #footerText: Text;
+  #spacing: number;
+  #title: string;
+  #footer: string;
 
-  constructor(private props: FormProps) {
+  constructor(
+    private tui: TUI,
+    private done: (value?: unknown | null) => void,
+    options: FormOptions,
+  ) {
     super();
 
-    for (const field of props.fields) {
-      this.addChild(field);
+    this.#title = options.title;
+    this.#footer = options.footer ?? "";
+
+    this.#fields = options.fields;
+    this.#spacing = options.spacing ?? 2;
+    this.#titleText = new Text(this.#title);
+    this.#footerText = new Text(this.#footer);
+
+    const children: Component[] = [this.#titleText, ...this.#fields];
+
+    if (this.#footer.length > 0) {
+      children.push(this.#footerText);
     }
+
+    children.forEach((child, index) => {
+      this.addChild(child);
+
+      if (index < children.length - 1) {
+        this.addChild(new Spacer(this.#spacing));
+      }
+    });
   }
 
   get focused() {
@@ -140,9 +168,21 @@ export class Form extends Container implements Focusable {
     this.#syncFieldFocus();
   }
 
+  override render(width: number): string[] {
+    const lines = super.render(width);
+
+    lines[0] = this.#centerLine(this.#title, width);
+
+    if (this.#footer.length > 0) {
+      lines[lines.length - 1] = truncateToWidth(this.#footer, width);
+    }
+
+    return lines;
+  }
+
   handleInput(data: string): void {
     if (matchesKey(data, Key.escape)) {
-      this.props.onCancel?.();
+      this.done(null);
       return;
     }
 
@@ -157,8 +197,8 @@ export class Form extends Container implements Focusable {
     }
 
     if (matchesKey(data, Key.enter)) {
-      if (this.#activeFieldIndex === this.props.fields.length - 1) {
-        this.props.onSubmit?.();
+      if (this.#fields.length === 0 || this.#activeFieldIndex === this.#fields.length - 1) {
+        this.done();
         return;
       }
 
@@ -166,21 +206,35 @@ export class Form extends Container implements Focusable {
       return;
     }
 
-    this.props.fields[this.#activeFieldIndex]?.handleInput(data);
-    this.props.tui.requestRender();
+    this.#fields[this.#activeFieldIndex]?.handleInput(data);
+    this.tui.requestRender();
   }
 
   #moveFocus(direction: 1 | -1) {
+    if (this.#fields.length === 0) {
+      this.tui.requestRender();
+      return;
+    }
+
     this.#activeFieldIndex =
-      (this.#activeFieldIndex + direction + this.props.fields.length) %
-      this.props.fields.length;
+      (this.#activeFieldIndex + direction + this.#fields.length) % this.#fields.length;
     this.#syncFieldFocus();
-    this.props.tui.requestRender();
+    this.tui.requestRender();
   }
 
   #syncFieldFocus() {
-    this.props.fields.forEach((field, index) => {
+    this.#fields.forEach((field, index) => {
       field.setFocused(this.#focused && index === this.#activeFieldIndex);
     });
+  }
+
+  #centerLine(text: string, width: number) {
+    if (text.length >= width) {
+      return truncateToWidth(text, width);
+    }
+
+    const leftPaddingWidth = Math.floor((width - text.length) / 2);
+    const rightPaddingWidth = width - text.length - leftPaddingWidth;
+    return `${" ".repeat(leftPaddingWidth)}${text}${" ".repeat(rightPaddingWidth)}`;
   }
 }
