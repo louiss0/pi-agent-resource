@@ -107,7 +107,7 @@ export class SkillForm extends Container implements Focusable {
     this.#labelledInputs = this.#requiredAgentSkillFieldsKeys.map(
       (label) => new LabelledInput(label, theme),
     );
-    this.#confirmationBox = new ConfirmationBox(tui);
+    this.#confirmationBox = new ConfirmationBox(theme, "confirmation");
 
     this.#syncInputFocus();
 

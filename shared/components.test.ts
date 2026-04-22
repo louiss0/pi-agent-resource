@@ -34,10 +34,20 @@ describe("shared/components", () => {
     }
   }
 
+  const errorColor = "#ff0000";
+  const accentColor = "#00ffff";
+  const dimColor = "#888888";
   function createTheme() {
-    return {
-      fg: (_color: string, text: string) => text,
-    } as unknown as Theme;
+    const theme = new Theme(
+      {
+        error: errorColor,
+        accent: accentColor,
+        dim: dimColor,
+      } as ConstructorParameters<typeof Theme>[0],
+      {} as ConstructorParameters<typeof Theme>[1],
+      "truecolor",
+    );
+    return theme;
   }
 
   function createTui() {
@@ -78,70 +88,79 @@ describe("shared/components", () => {
 
   describe("ConfirmationBox", () => {
     it("renders unchecked by default", () => {
-      const checkbox = new ConfirmationBox(createTui());
+      const theme = createTheme();
+      const checkbox = new ConfirmationBox(theme);
+      const lines = checkbox.render(45).join("\n");
 
-      expect(checkbox.render(45).join("\n")).toContain(
-        "[ ] Do you want to fill in the next fields?",
-      );
+      expect(lines).toContain(`  ${theme.getFgAnsi("accent")} [ ]`);
+      expect(lines).toContain(" Do you want to fill in the next fields?");
     });
 
     it("renders the focused prefix when focused", () => {
-      const checkbox = new ConfirmationBox(createTui());
+      const theme = createTheme();
+      const checkbox = new ConfirmationBox(theme);
 
       checkbox.setFocused(true);
 
-      expect(checkbox.render(45).join("\n")).toContain(
-        "> [ ] Do you want to fill in the next fields?",
-      );
+      const lines = checkbox.render(45).join("\n");
+
+      expect(lines).toContain(`> ${theme.getFgAnsi("accent")} [ ]`);
+      expect(lines).toContain(" Do you want to fill in the next fields?");
     });
 
     it("toggles to confirmed when space is pressed", () => {
-      const tui = createTui();
-      const checkbox = new ConfirmationBox(tui);
+      const theme = createTheme();
+      const checkbox = new ConfirmationBox(theme);
 
       checkbox.setFocused(true);
       checkbox.handleInput(Key.space);
 
       const lines = checkbox.render(45).join("\n");
 
-      expect(lines).toContain("> [x] Do you want to fill in the next fields?");
-      expect(tui.requestRender).toHaveBeenCalledTimes(1);
+      expect(lines).toContain(`> ${theme.getFgAnsi("accent")} [x]`);
+      expect(lines).toContain(" Do you want to fill in the next fields?");
     });
 
     it("toggles back to unchecked when space is pressed twice", () => {
-      const tui = createTui();
-      const checkbox = new ConfirmationBox(tui);
+      const theme = createTheme();
+      const checkbox = new ConfirmationBox(theme);
 
       checkbox.handleInput(Key.space);
       checkbox.handleInput(Key.space);
 
-      expect(checkbox.render(45).join("\n")).toContain(
-        "[ ] Do you want to fill in the next fields?",
-      );
-      expect(tui.requestRender).toHaveBeenCalledTimes(2);
+      const lines = checkbox.render(45).join("\n");
+
+      expect(lines).toContain(`  ${theme.getFgAnsi("accent")} [ ]`);
+      expect(lines).toContain(" Do you want to fill in the next fields?");
     });
 
     it("confirms the box without toggling it back off", () => {
-      const tui = createTui();
-      const checkbox = new ConfirmationBox(tui);
+      const theme = createTheme();
+      const checkbox = new ConfirmationBox(theme);
 
       checkbox.confirm();
       checkbox.confirm();
 
-      expect(checkbox.render(45).join("\n")).toContain(
-        "[x] Do you want to fill in the next fields?",
+      const lines = checkbox.render(45).join("\n");
+
+      expect(lines).toContain(`  ${theme.getFgAnsi("accent")} [x]`);
+      expect(lines).toContain(" Do you want to fill in the next fields?");
+    });
+
+    it("the checkbox is colored", () => {
+      const theme = createTheme();
+      const checkbox = new ConfirmationBox(theme);
+      const lines = checkbox.render(45).join("\n");
+
+      expect(lines).toContain(`${theme.getFgAnsi("accent")} [ ]`);
+      expect(lines).not.toContain(
+        `${theme.getFgAnsi("accent")} [ ] Do you want to fill in the next fields?`,
       );
-      expect(tui.requestRender).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("Form", () => {
-    function createForm(
-      title: string,
-      fields: FormField[],
-      footer = "",
-      spacing?: number,
-    ) {
+    function createForm(title: string, fields: FormField[], footer = "", spacing?: number) {
       const tui = createTui();
       const done = vi.fn();
       const form = new Form(tui, done, {
@@ -205,7 +224,7 @@ describe("shared/components", () => {
 
     it("focuses the first field when the form becomes focused", () => {
       const firstField = new TestField("");
-      const { form } = createForm("Title", [firstField]);
+      createForm("Title", [firstField]);
 
       expect(firstField.focused).toBe(true);
     });

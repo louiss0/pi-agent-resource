@@ -12,12 +12,18 @@ import {
   truncateToWidth,
 } from "@mariozechner/pi-tui";
 
-export class LabelledInput extends Container {
+export class LabelledInput extends Container implements Component {
   #name: string;
   #errorText = new Text("");
   #input = new Input();
   #labelText: Text;
   #theme: Theme;
+
+  invalidate(): void {
+    this.#labelText.invalidate();
+    this.#input.invalidate();
+    this.#errorText.invalidate();
+  }
 
   constructor(name: string, theme: Theme) {
     super();
@@ -62,34 +68,38 @@ export class LabelledInput extends Container {
 }
 
 export class ConfirmationBox implements Component {
-  #confirmed = false;
+  #value = false;
   #focused = false;
-  #tui: TUI;
+  #name: string;
+  #theme: Theme;
 
-  constructor(tui: TUI) {
-    this.#tui = tui;
+  constructor(theme: Theme, name = "confirm") {
+    this.#name = name;
+    this.#theme = theme;
   }
 
-  get confirmed() {
-    return this.#confirmed;
+  get value() {
+    return this.#value;
   }
 
   setFocused(focused: boolean) {
     this.#focused = focused;
   }
 
+  get name() {
+    return this.#name;
+  }
+
   confirm() {
-    if (this.#confirmed) {
+    if (this.#value) {
       return;
     }
 
-    this.#confirmed = true;
-    this.#tui.requestRender();
+    this.#value = true;
   }
 
   toggle() {
-    this.#confirmed = !this.#confirmed;
-    this.#tui.requestRender();
+    this.#value = !this.#value;
   }
 
   handleInput(data: string): void {
@@ -98,10 +108,11 @@ export class ConfirmationBox implements Component {
     }
   }
 
-  render(width: number): string[] {
-    const box = this.#confirmed ? "[x]" : "[ ]";
+  render(_width: number): string[] {
     const prefix = this.#focused ? "> " : "  ";
-    return [truncateToWidth(`${prefix}${box} Do you want to fill in the next fields?`, width)];
+    const box = this.#theme.fg("accent", ` ${this.#value ? "[x]" : "[ ]"}`);
+    const label = " Do you want to fill in the next fields?";
+    return [`${prefix}${box}${label}`];
   }
 
   invalidate(): void {}
@@ -119,7 +130,10 @@ type FormOptions = {
   spacing?: number;
 };
 
-export class Form extends Container implements Focusable {
+export class Form<T extends Record<string, string | number | boolean>>
+  extends Container
+  implements Focusable
+{
   #activeFieldIndex = 0;
   #focused = false;
   #fields: FormField[];
@@ -131,7 +145,7 @@ export class Form extends Container implements Focusable {
 
   constructor(
     private tui: TUI,
-    private done: (value?: unknown | null) => void,
+    private done: (value?: T | null) => void,
     options: FormOptions,
   ) {
     super();
