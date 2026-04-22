@@ -71,9 +71,10 @@ export class ConfirmationBox implements Component {
   #value = false;
   #focused = false;
   #name: string;
+  #message: string;
   #theme: Theme;
 
-  constructor(theme: Theme, name = "confirm") {
+  constructor(theme: Theme, message: string, name = "confirm") {
     this.#name = name;
     this.#theme = theme;
   }
@@ -111,8 +112,7 @@ export class ConfirmationBox implements Component {
   render(_width: number): string[] {
     const prefix = this.#focused ? "> " : "  ";
     const box = this.#theme.fg("accent", ` ${this.#value ? "[x]" : "[ ]"}`);
-    const label = " Do you want to fill in the next fields?";
-    return [`${prefix}${box}${label}`];
+    return [`${prefix}${box} ${this.#message}`];
   }
 
   invalidate(): void {}

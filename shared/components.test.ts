@@ -96,9 +96,18 @@ describe("shared/components", () => {
       expect(lines).toContain(" Do you want to fill in the next fields?");
     });
 
+    it("accepts the display message as the second parameter", () => {
+      const theme = createTheme();
+      const checkbox = new ConfirmationBox(theme, "Use advanced options?");
+      const lines = checkbox.render(45).join("\n");
+
+      expect(lines).toContain(" Use advanced options?");
+      expect(lines).not.toContain(" Do you want to fill in the next fields?");
+    });
+
     it("renders the focused prefix when focused", () => {
       const theme = createTheme();
-      const checkbox = new ConfirmationBox(theme);
+      const checkbox = new ConfirmationBox(theme, "Do you want to fill in the next fields?");
 
       checkbox.setFocused(true);
 
@@ -110,7 +119,7 @@ describe("shared/components", () => {
 
     it("toggles to confirmed when space is pressed", () => {
       const theme = createTheme();
-      const checkbox = new ConfirmationBox(theme);
+      const checkbox = new ConfirmationBox(theme, "Do you want to fill in the next fields?");
 
       checkbox.setFocused(true);
       checkbox.handleInput(Key.space);
@@ -136,7 +145,7 @@ describe("shared/components", () => {
 
     it("confirms the box without toggling it back off", () => {
       const theme = createTheme();
-      const checkbox = new ConfirmationBox(theme);
+      const checkbox = new ConfirmationBox(theme, "Do you want to fill in the next fields?");
 
       checkbox.confirm();
       checkbox.confirm();
@@ -149,7 +158,7 @@ describe("shared/components", () => {
 
     it("the checkbox is colored", () => {
       const theme = createTheme();
-      const checkbox = new ConfirmationBox(theme);
+      const checkbox = new ConfirmationBox(theme, "Do you want to fill in the next fields?");
       const lines = checkbox.render(45).join("\n");
 
       expect(lines).toContain(`${theme.getFgAnsi("accent")} [ ]`);
