@@ -57,7 +57,8 @@ export function generateCommandHandlerUsingDeps(
         break;
     }
   };
-}
+};
+
 const RequiredAgentSkillFieldsSchema = object({
   name: pipe(
     string(),
@@ -67,13 +68,13 @@ const RequiredAgentSkillFieldsSchema = object({
   description: pipe(string(), minLength(1, "Description is required"), maxLength(255)),
 });
 
-const RequiredSkillFormValues = object({
+const RequiredSkillFormSchema = object({
   ...RequiredAgentSkillFieldsSchema.entries,
   confirmation: fallback(boolean(), false),
 });
 
 type RequiredAgentSkillFieldsSchema = InferOutput<typeof RequiredAgentSkillFieldsSchema>;
-type RequiredSkillFormValues = InferOutput<typeof RequiredSkillFormValues>;
+export type RequiredSkillFormValues = InferOutput<typeof RequiredSkillFormSchema>;
 
 const parseRequiredAgentSkillFields: Parse<RequiredSkillFormValues> = (values) => {
   const result = safeParse(RequiredAgentSkillFieldsSchema, values);
@@ -101,34 +102,32 @@ const parseRequiredAgentSkillFields: Parse<RequiredSkillFormValues> = (values) =
   >;
 };
 
-export class SkillForm extends Form<RequiredSkillFormValues> {
-  constructor(
-    tui: TUI,
-    theme: Theme,
-    done: (value: RequiredAgentSkillFieldsSchema | null) => void,
-  ) {
-    const labelledInputs = Object.keys(RequiredAgentSkillFieldsSchema.entries).map(
-      (label) => new LabelledInput(label, theme),
-    );
-    const confirmationBox = new ConfirmationBox(
-      theme,
-      "Do you want to fill in the next fields?",
-      "confirmation",
-    );
+export function createSkillForm(
+  tui: TUI,
+  theme: Theme,
+  done: (value: RequiredSkillFormValues | null) => void,
+) {
+  const labelledInputs = Object.keys(RequiredAgentSkillFieldsSchema.entries).map(
+    (label) => new LabelledInput(label, theme),
+  );
+  const confirmationBox = new ConfirmationBox(
+    theme,
+    "Do you want to fill in the next fields?",
+    "confirmation",
+  );
 
-    super(tui, done, {
-      title: "Create Skill",
-      fields: [...labelledInputs, confirmationBox],
-      parse: parseRequiredAgentSkillFields,
-      footer: theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel"),
-      spacing: 1,
-    });
-  }
+  return new Form<RequiredSkillFormValues>(tui, done, {
+    title: "Create Skill",
+    fields: [...labelledInputs, confirmationBox],
+    parse: parseRequiredAgentSkillFields,
+    footer: theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel"),
+    spacing: 1,
+  });
 }
 
 async function handleCreate(ctx: ExtensionContext) {
-  const formValues = await ctx.ui.custom<RequiredAgentSkillFieldsSchema | null>(
-    (tui, theme, _kb, done) => new SkillForm(tui, theme, done),
+  const formValues = await ctx.ui.custom<RequiredSkillFormValues | null>(
+    (tui, theme, _kb, done) => createSkillForm(tui, theme, done),
     { overlay: true, overlayOptions: { offsetY: -500 } },
   );
 
