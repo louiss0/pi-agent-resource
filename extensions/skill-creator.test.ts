@@ -12,10 +12,16 @@ vi.mock("@mariozechner/pi-tui", async () => {
 });
 
 import { SubCommands } from "../shared/subcommands";
-import { generateCommandHandlerUsingDeps, SkillForm } from "./skill-creator";
+import {
+  createSkillForm,
+  generateCommandHandlerUsingDeps,
+  type RequiredSkillFormValues,
+} from "./skill-creator";
+
+type SkillForm = ReturnType<typeof createSkillForm>;
 
 describe("Skill Creator", () => {
-  function createSkillForm(themeOverride?: Theme) {
+  function createTestSkillForm(themeOverride?: Theme) {
     const done = vi.fn();
     const tui = {
       requestRender: vi.fn(),
@@ -25,7 +31,7 @@ describe("Skill Creator", () => {
       ({
         fg: (_color: string, text: string) => text,
       } as unknown as Theme);
-    const form = new SkillForm(tui, theme, done);
+    const form = createSkillForm(tui, theme, done);
 
     form.focused = true;
 
@@ -54,14 +60,14 @@ describe("Skill Creator", () => {
     form.handleInput(key);
   }
 
-  describe("SkillForm", () => {
+  describe("createSkillForm", () => {
     it("renders a skill form", () => {
-      const { form } = createSkillForm();
+      const { form } = createTestSkillForm();
       assertInitialFormRender(renderFormLines, form, findLineIndex);
     });
 
     it("should show errors under both inputs only after an invalid submit", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       expect(renderForm(form)).not.toContain("Name is required");
       expect(renderForm(form)).not.toContain("Description is required");
@@ -104,7 +110,7 @@ describe("Skill Creator", () => {
         {} as ConstructorParameters<typeof Theme>[1],
         "truecolor",
       );
-      const { form } = createSkillForm(theme);
+      const { form } = createTestSkillForm(theme);
 
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
@@ -122,7 +128,7 @@ describe("Skill Creator", () => {
     });
 
     it("should submit the entered values with the correct field mapping", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       enterText(form, "test-skill");
       pressKey(form, Key.enter);
@@ -137,11 +143,12 @@ describe("Skill Creator", () => {
       expect(done).toHaveBeenCalledWith({
         name: "test-skill",
         description: "Useful skill description",
-      });
+        confirmation: false,
+      } satisfies RequiredSkillFormValues);
     });
 
     it("should show an error only for the missing description when the name is valid", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       enterText(form, "test-skill");
       pressKey(form, Key.enter);
@@ -155,7 +162,7 @@ describe("Skill Creator", () => {
     });
 
     it("should mark the confirmation box when space is pressed", () => {
-      const { form } = createSkillForm();
+      const { form } = createTestSkillForm();
 
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
@@ -165,7 +172,7 @@ describe("Skill Creator", () => {
     });
 
     it("should allow cancelling even when the active field is invalid", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       pressKey(form, Key.escape);
 
@@ -207,7 +214,8 @@ describe("Skill Creator", () => {
       vi.mocked(context.ui.custom).mockResolvedValueOnce({
         name: "test-skill",
         description: "Test description",
-      });
+        confirmation: false,
+      } satisfies RequiredSkillFormValues);
 
       await handler("create", context);
 

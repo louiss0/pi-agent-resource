@@ -6,6 +6,8 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import { Key, matchesKey, type TUI } from "@mariozechner/pi-tui";
 import {
+  boolean,
+  fallback,
   type InferOutput,
   maxLength,
   minLength,
@@ -65,10 +67,15 @@ const RequiredAgentSkillFieldsSchema = object({
   description: pipe(string(), minLength(1, "Description is required"), maxLength(255)),
 });
 
-type RequiredAgentSkillFieldsSchema = InferOutput<typeof RequiredAgentSkillFieldsSchema>;
-type RequiredAgentSkillFormValues = RequiredAgentSkillFieldsSchema & { confirmation: boolean };
+const RequiredSkillFormValues = object({
+  ...RequiredAgentSkillFieldsSchema.entries,
+  confirmation: fallback(boolean(), false),
+});
 
-const parseRequiredAgentSkillFields: Parse<RequiredAgentSkillFormValues> = (values) => {
+type RequiredAgentSkillFieldsSchema = InferOutput<typeof RequiredAgentSkillFieldsSchema>;
+type RequiredSkillFormValues = InferOutput<typeof RequiredSkillFormValues>;
+
+const parseRequiredAgentSkillFields: Parse<RequiredSkillFormValues> = (values) => {
   const result = safeParse(RequiredAgentSkillFieldsSchema, values);
 
   if (result.success) {
@@ -88,10 +95,13 @@ const parseRequiredAgentSkillFields: Parse<RequiredAgentSkillFormValues> = (valu
     errors.set(key, currentError ? `${currentError}\n${issue.message}` : issue.message);
   }
 
-  return Object.fromEntries(errors.entries()) as Record<keyof RequiredAgentSkillFieldsSchema, string>;
+  return Object.fromEntries(errors.entries()) as Record<
+    keyof RequiredAgentSkillFieldsSchema,
+    string
+  >;
 };
 
-export class SkillForm extends Form<RequiredAgentSkillFormValues> {
+export class SkillForm extends Form<RequiredSkillFormValues> {
   constructor(
     tui: TUI,
     theme: Theme,
@@ -106,46 +116,13 @@ export class SkillForm extends Form<RequiredAgentSkillFormValues> {
       "confirmation",
     );
 
-    super(
-      tui,
-      (value) => {
-        if (value == null) {
-          done(null);
-          return;
-        }
-
-        const { confirmation: _confirmation, ...fields } = value as RequiredAgentSkillFieldsSchema & {
-          confirmation: boolean;
-        };
-        done(fields);
-      },
-      {
-        title: "Create Skill",
-        fields: [...labelledInputs, confirmationBox],
-        parse: parseRequiredAgentSkillFields,
-        footer: theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel"),
-        spacing: 1,
-      },
-    );
-  }
-
-  protected override updateFieldFocus(field: LabelledInput | ConfirmationBox, focused: boolean) {
-    field.setFocused(focused);
-
-    if (field instanceof LabelledInput) {
-      field.setLabelTextPrefix(focused ? "› " : "  ");
-    }
-  }
-
-  protected override syncFieldError(field: LabelledInput | ConfirmationBox, error?: string) {
-    if (error !== undefined) {
-      field.setError(error);
-      return;
-    }
-
-    if (field instanceof LabelledInput || field instanceof ConfirmationBox) {
-      field.clearError();
-    }
+    super(tui, done, {
+      title: "Create Skill",
+      fields: [...labelledInputs, confirmationBox],
+      parse: parseRequiredAgentSkillFields,
+      footer: theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel"),
+      spacing: 1,
+    });
   }
 }
 
