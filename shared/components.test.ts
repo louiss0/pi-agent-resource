@@ -165,6 +165,10 @@ describe("shared/components", () => {
         this.#errorText.setText(error);
       }
 
+      clearError() {
+        this.#errorText.setText("");
+      }
+
       get name() {
         return this.#name;
       }
@@ -219,6 +223,10 @@ describe("shared/components", () => {
 
       setError(error: string) {
         this.#errorText.setText(error);
+      }
+
+      clearError() {
+        this.#errorText.setText("");
       }
     }
 

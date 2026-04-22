@@ -18,7 +18,6 @@ export class LabelledInput extends Container implements Component {
   #input = new Input();
   #labelText: Text;
   #theme: Theme;
-
   invalidate(): void {
     this.#labelText.invalidate();
     this.#input.invalidate();
@@ -54,6 +53,10 @@ export class LabelledInput extends Container implements Component {
     this.#labelText.setText(this.#theme.fg("accent", `${prefix}${this.#name}`));
   }
 
+  setSelected(selected: boolean) {
+    this.setLabelTextPrefix(selected ? "› " : "  ");
+  }
+
   get name() {
     return this.#name;
   }
@@ -74,7 +77,6 @@ export class ConfirmationBox extends Container implements Component {
   #message: string;
   #theme: Theme;
   #errorText = new Text("");
-
   constructor(theme: Theme, message: string, name = "confirm") {
     super();
     this.#name = name;
@@ -96,7 +98,9 @@ export class ConfirmationBox extends Container implements Component {
   }
 
   setError(...error: string[]) {
-    this.#errorText.setText(error.map((message) => this.#theme.fg("error", message)).join("\n"));
+    this.#errorText.setText(
+      error.map((message) => this.#theme.fg("error", message)).join("\n"),
+    );
   }
 
   clearError() {
@@ -138,6 +142,8 @@ export class ConfirmationBox extends Container implements Component {
 export type FormField = Component & {
   setFocused(focused: boolean): void;
   setError(error: string): void;
+  clearError(): void;
+  setSelected?(selected: boolean): void;
   handleInput(data: string): void;
   name: string;
   value: string | number | boolean;
@@ -173,7 +179,7 @@ export class Form<T extends Record<string, string | number | boolean>>
 
   constructor(
     private tui: TUI,
-    private done: (value?: T | null) => void,
+    private done: (value: T | null) => void,
     options: FormOptions<T>,
   ) {
     super();
@@ -267,18 +273,11 @@ export class Form<T extends Record<string, string | number | boolean>>
 
   #syncFieldFocus() {
     this.#fields.forEach((field, index) => {
-      this.updateFieldFocus(field, this.#focused && index === this.#activeFieldIndex);
+      const isSelected = this.#focused && index === this.#activeFieldIndex;
+
+      field.setFocused(isSelected);
+      field.setSelected?.(isSelected);
     });
-  }
-
-  protected updateFieldFocus(field: FormField, focused: boolean) {
-    field.setFocused(focused);
-  }
-
-  protected syncFieldError(field: FormField, error?: string) {
-    if (error !== undefined) {
-      field.setError(error);
-    }
   }
 
   #submit() {
@@ -287,7 +286,14 @@ export class Form<T extends Record<string, string | number | boolean>>
 
     if (parsed !== undefined) {
       this.#fields.forEach((field) => {
-        this.syncFieldError(field, parsed[field.name]);
+        const error = parsed[field.name];
+
+        if (error !== undefined) {
+          field.setError(error);
+          return;
+        }
+
+        field.clearError();
       });
       this.tui.requestRender();
       return;
