@@ -67,17 +67,20 @@ export class LabelledInput extends Container implements Component {
   }
 }
 
-export class ConfirmationBox implements Component {
+export class ConfirmationBox extends Container implements Component {
   #value = false;
   #focused = false;
   #name: string;
   #message: string;
   #theme: Theme;
+  #errorText = new Text("");
 
   constructor(theme: Theme, message: string, name = "confirm") {
+    super();
     this.#name = name;
     this.#message = message;
     this.#theme = theme;
+    this.addChild(this.#errorText);
   }
 
   get value() {
@@ -90,6 +93,14 @@ export class ConfirmationBox implements Component {
 
   get name() {
     return this.#name;
+  }
+
+  setError(...error: string[]) {
+    this.#errorText.setText(error.map((message) => this.#theme.fg("error", message)).join("\n"));
+  }
+
+  clearError() {
+    this.#errorText.setText("");
   }
 
   confirm() {
@@ -110,13 +121,18 @@ export class ConfirmationBox implements Component {
     }
   }
 
-  render(_width: number): string[] {
+  override render(width: number): string[] {
     const prefix = this.#focused ? "> " : "  ";
     const box = this.#theme.fg("accent", ` ${this.#value ? "[x]" : "[ ]"}`);
-    return [`${prefix}${box} ${this.#message}`];
+    const lines = [`${prefix}${box} ${this.#message}`];
+    const errorLines = this.#errorText.render(width).filter((line) => line.length > 0);
+
+    return [...lines, ...errorLines];
   }
 
-  invalidate(): void {}
+  invalidate(): void {
+    this.#errorText.invalidate();
+  }
 }
 
 export type FormField = Component & {
@@ -129,7 +145,7 @@ export type FormField = Component & {
 
 export type Parse<T extends Record<string, string | number | boolean>> = (value: T) =>
   | {
-      [key in keyof T]: string;
+      [key in keyof T]?: string;
     }
   | undefined;
 
@@ -225,22 +241,7 @@ export class Form<T extends Record<string, string | number | boolean>>
 
     if (matchesKey(data, Key.enter)) {
       if (this.#fields.length === 0 || this.#activeFieldIndex === this.#fields.length - 1) {
-        const values = this.#fields.reduce((acc, field) => {
-          return acc.set(field.name, field.value);
-        }, new Map<string, string | number | boolean>());
-
-        const fields = Object.fromEntries(values.entries()) as T;
-        const parsed = this.#parse(fields);
-
-        if (parsed !== undefined) {
-          for (const [name, error] of Object.entries(parsed)) {
-            this.#fields.find((f) => f.name === name)?.setError(error);
-          }
-          this.tui.requestRender();
-          return;
-        }
-
-        this.done(fields);
+        this.#submit();
         return;
       }
 
@@ -266,8 +267,41 @@ export class Form<T extends Record<string, string | number | boolean>>
 
   #syncFieldFocus() {
     this.#fields.forEach((field, index) => {
-      field.setFocused(this.#focused && index === this.#activeFieldIndex);
+      this.updateFieldFocus(field, this.#focused && index === this.#activeFieldIndex);
     });
+  }
+
+  protected updateFieldFocus(field: FormField, focused: boolean) {
+    field.setFocused(focused);
+  }
+
+  protected syncFieldError(field: FormField, error?: string) {
+    if (error !== undefined) {
+      field.setError(error);
+    }
+  }
+
+  #submit() {
+    const fields = this.#getValues();
+    const parsed = this.#parse(fields);
+
+    if (parsed !== undefined) {
+      this.#fields.forEach((field) => {
+        this.syncFieldError(field, parsed[field.name]);
+      });
+      this.tui.requestRender();
+      return;
+    }
+
+    this.done(fields);
+  }
+
+  #getValues() {
+    const values = this.#fields.reduce((acc, field) => {
+      return acc.set(field.name, field.value);
+    }, new Map<string, string | number | boolean>());
+
+    return Object.fromEntries(values.entries()) as T;
   }
 
   #centerLine(text: string, width: number) {

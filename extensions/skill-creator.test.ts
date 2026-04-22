@@ -246,7 +246,7 @@ function assertInitialFormRender(
 ) {
   const lines = renderFormLines(form);
   const createSkillIndex = findLineIndex(lines, "Create Skill");
-  expect(createSkillIndex).toBe(1);
+  expect(createSkillIndex).toBe(0);
   const nameLabelIndex = findLineIndex(lines, "name");
   const descriptionLabelIndex = findLineIndex(lines, "description");
   const inputIndexes = lines
