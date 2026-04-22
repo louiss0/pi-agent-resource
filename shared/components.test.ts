@@ -11,7 +11,7 @@ vi.mock("@mariozechner/pi-tui", async () => {
   };
 });
 
-import { ConfirmationBox, Form, type FormField, LabelledInput } from "./components";
+import { ConfirmationBox, Form, type FormField, LabelledInput, Parse } from "./components";
 
 describe("shared/components", () => {
   function createTheme() {
@@ -151,12 +151,18 @@ describe("shared/components", () => {
       focusedStates: boolean[] = [];
       focused = false;
       #name: string;
+      #errorText = new Text("");
       constructor(name: string) {
         super();
         this.#name = name;
 
         this.addChild(new Text(this.#name));
         this.addChild(new Input());
+        this.addChild(this.#errorText);
+      }
+
+      setError(error: string) {
+        this.#errorText.setText(error);
       }
 
       get name() {
@@ -182,12 +188,14 @@ describe("shared/components", () => {
       focusedStates: boolean[] = [];
       focused = false;
       #name: string;
+      #errorText = new Text("");
       constructor(name: string, message: string) {
         super();
         this.#name = name;
 
         this.addChild(new Text(this.#name));
         this.addChild(new Text(`[] ${message}`));
+        this.addChild(this.#errorText);
       }
 
       get name() {
@@ -208,34 +216,56 @@ describe("shared/components", () => {
           this.#value = !this.#value;
         }
       }
-    }
 
-    type ParseFunction = (value: Record<string, string | number | boolean>) => {
-      [key in keyof Record<string, string | number | boolean>]: string;
-    };
+      setError(error: string) {
+        this.#errorText.setText(error);
+      }
+    }
 
     function createForm(
       title: string,
       fields: FormField[],
-      options: { parse?: ParseFunction; footer?: string; spacing?: number } = {
-        parse: () => ({}),
+      options: {
+        parse?: Parse<Record<string, string | number | boolean>>;
+        footer?: string;
+        spacing?: number;
+      } = {
+        parse: () => undefined,
         footer: undefined,
       },
     ) {
       const tui = createTui();
       const done = vi.fn();
+      const parse = vi.fn(options.parse);
       const form = new Form(tui, done, {
         title,
         fields,
         footer: options.footer,
-        parse: vi.fn(options.parse),
+        parse,
         spacing: options.spacing,
       });
 
       form.focused = true;
 
-      return { form, tui, done };
+      return { form, tui, done, parse };
     }
+
+    it("renders the form with errors when submitted with invalid input", () => {
+      const errorFields = { "field-1": "Name is required" };
+      const { form, done, parse } = createForm("Title", [new TestField("field-1")], {
+        parse: () => errorFields,
+      });
+
+      form.handleInput(Key.enter);
+
+      expect(parse).toHaveBeenCalledWith({ "field-1": "" });
+      expect(done).not.toHaveBeenCalled();
+
+      const lines = form.render(45).join("\n");
+      for (const value of Object.values(errorFields)) {
+        expect(lines.includes(value)).toBeTruthy();
+      }
+    });
 
     it("submits a object with the correct values based on names ", () => {
       const { form, done } = createForm("Title", [
