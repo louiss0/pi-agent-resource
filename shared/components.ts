@@ -121,15 +121,22 @@ export class ConfirmationBox implements Component {
 
 export type FormField = Component & {
   setFocused(focused: boolean): void;
+  setError(error: string): void;
   handleInput(data: string): void;
   name: string;
   value: string | number | boolean;
 };
 
+export type Parse<T extends Record<string, string | number | boolean>> = (value: T) =>
+  | {
+      [key in keyof T]: string;
+    }
+  | undefined;
+
 type FormOptions<T extends Record<string, string | number | boolean>> = {
   title: string;
   fields: FormField[];
-  parse: (value: T) => { [key in keyof T]: string };
+  parse: Parse<T>;
   footer?: string;
   spacing?: number;
 };
@@ -146,6 +153,7 @@ export class Form<T extends Record<string, string | number | boolean>>
   #spacing: number;
   #title: string;
   #footer: string;
+  #parse: Parse<T>;
 
   constructor(
     private tui: TUI,
@@ -156,6 +164,7 @@ export class Form<T extends Record<string, string | number | boolean>>
 
     this.#title = options.title;
     this.#footer = options.footer ?? "";
+    this.#parse = options.parse;
 
     this.#fields = options.fields;
     this.#spacing = options.spacing ?? 2;
@@ -219,7 +228,19 @@ export class Form<T extends Record<string, string | number | boolean>>
         const values = this.#fields.reduce((acc, field) => {
           return acc.set(field.name, field.value);
         }, new Map<string, string | number | boolean>());
-        this.done(Object.fromEntries(values.entries()) as T);
+
+        const fields = Object.fromEntries(values.entries()) as T;
+        const parsed = this.#parse(fields);
+
+        if (parsed !== undefined) {
+          for (const [name, error] of Object.entries(parsed)) {
+            this.#fields.find((f) => f.name === name)?.setError(error);
+          }
+          this.tui.requestRender();
+          return;
+        }
+
+        this.done(fields);
         return;
       }
 
