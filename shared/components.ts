@@ -76,6 +76,7 @@ export class ConfirmationBox implements Component {
 
   constructor(theme: Theme, message: string, name = "confirm") {
     this.#name = name;
+    this.#message = message;
     this.#theme = theme;
   }
 
@@ -119,13 +120,16 @@ export class ConfirmationBox implements Component {
 }
 
 export type FormField = Component & {
-  setFocused: (focused: boolean) => void;
-  handleInput: (data: string) => void;
+  setFocused(focused: boolean): void;
+  handleInput(data: string): void;
+  name: string;
+  value: string | number | boolean;
 };
 
-type FormOptions = {
+type FormOptions<T extends Record<string, string | number | boolean>> = {
   title: string;
   fields: FormField[];
+  parse: (value: T) => { [key in keyof T]: string };
   footer?: string;
   spacing?: number;
 };
@@ -146,7 +150,7 @@ export class Form<T extends Record<string, string | number | boolean>>
   constructor(
     private tui: TUI,
     private done: (value?: T | null) => void,
-    options: FormOptions,
+    options: FormOptions<T>,
   ) {
     super();
 
@@ -212,7 +216,10 @@ export class Form<T extends Record<string, string | number | boolean>>
 
     if (matchesKey(data, Key.enter)) {
       if (this.#fields.length === 0 || this.#activeFieldIndex === this.#fields.length - 1) {
-        this.done();
+        const values = this.#fields.reduce((acc, field) => {
+          return acc.set(field.name, field.value);
+        }, new Map<string, string | number | boolean>());
+        this.done(Object.fromEntries(values.entries()) as T);
         return;
       }
 

@@ -1,5 +1,5 @@
 import { Theme } from "@mariozechner/pi-coding-agent";
-import { Container, Key, Text, type TUI } from "@mariozechner/pi-tui";
+import { Container, Input, Key, matchesKey, Text, type TUI } from "@mariozechner/pi-tui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module =
@@ -14,35 +14,12 @@ vi.mock("@mariozechner/pi-tui", async () => {
 import { ConfirmationBox, Form, type FormField, LabelledInput } from "./components";
 
 describe("shared/components", () => {
-  class TestField extends Container implements FormField {
-    inputs: string[] = [];
-    focusedStates: boolean[] = [];
-    focused = false;
-
-    constructor(private label: string) {
-      super();
-      this.addChild(new Text(label));
-    }
-
-    setFocused(focused: boolean) {
-      this.focused = focused;
-      this.focusedStates.push(focused);
-    }
-
-    handleInput(data: string) {
-      this.inputs.push(data);
-    }
-  }
-
-  const errorColor = "#ff0000";
-  const accentColor = "#00ffff";
-  const dimColor = "#888888";
   function createTheme() {
     const theme = new Theme(
       {
-        error: errorColor,
-        accent: accentColor,
-        dim: dimColor,
+        error: "#ff0000",
+        accent: "#00ffff",
+        dim: "#888888",
       } as ConstructorParameters<typeof Theme>[0],
       {} as ConstructorParameters<typeof Theme>[1],
       "truecolor",
@@ -89,7 +66,7 @@ describe("shared/components", () => {
   describe("ConfirmationBox", () => {
     it("renders unchecked by default", () => {
       const theme = createTheme();
-      const checkbox = new ConfirmationBox(theme);
+      const checkbox = new ConfirmationBox(theme, "Do you want to fill in the next fields?");
       const lines = checkbox.render(45).join("\n");
 
       expect(lines).toContain(`  ${theme.getFgAnsi("accent")} [ ]`);
@@ -132,7 +109,7 @@ describe("shared/components", () => {
 
     it("toggles back to unchecked when space is pressed twice", () => {
       const theme = createTheme();
-      const checkbox = new ConfirmationBox(theme);
+      const checkbox = new ConfirmationBox(theme, "Do you want to fill in the next fields?");
 
       checkbox.handleInput(Key.space);
       checkbox.handleInput(Key.space);
@@ -169,14 +146,90 @@ describe("shared/components", () => {
   });
 
   describe("Form", () => {
-    function createForm(title: string, fields: FormField[], footer = "", spacing?: number) {
+    class TestField extends Container implements FormField {
+      inputs: string[] = [];
+      focusedStates: boolean[] = [];
+      focused = false;
+      #name: string;
+      constructor(name: string) {
+        super();
+        this.#name = name;
+
+        this.addChild(new Text(this.#name));
+        this.addChild(new Input());
+      }
+
+      get name() {
+        return this.#name;
+      }
+
+      get value() {
+        return this.inputs.join();
+      }
+
+      setFocused(focused: boolean) {
+        this.focused = focused;
+        this.focusedStates.push(focused);
+      }
+
+      handleInput(data: string) {
+        this.inputs.push(data);
+      }
+    }
+
+    class TestConfirmationBox extends Container implements FormField {
+      #value = false;
+      focusedStates: boolean[] = [];
+      focused = false;
+      #name: string;
+      constructor(name: string, message: string) {
+        super();
+        this.#name = name;
+
+        this.addChild(new Text(this.#name));
+        this.addChild(new Text(`[] ${message}`));
+      }
+
+      get name() {
+        return this.#name;
+      }
+
+      get value() {
+        return this.#value;
+      }
+
+      setFocused(focused: boolean) {
+        this.focused = focused;
+        this.focusedStates.push(focused);
+      }
+
+      handleInput(data: string) {
+        if (matchesKey(data, Key.space)) {
+          this.#value = !this.#value;
+        }
+      }
+    }
+
+    type ParseFunction = (value: Record<string, string | number | boolean>) => {
+      [key in keyof Record<string, string | number | boolean>]: string;
+    };
+
+    function createForm(
+      title: string,
+      fields: FormField[],
+      options: { parse?: ParseFunction; footer?: string; spacing?: number } = {
+        parse: () => ({}),
+        footer: undefined,
+      },
+    ) {
       const tui = createTui();
       const done = vi.fn();
       const form = new Form(tui, done, {
         title,
         fields,
-        footer,
-        spacing,
+        footer: options.footer,
+        parse: vi.fn(options.parse),
+        spacing: options.spacing,
       });
 
       form.focused = true;
@@ -244,7 +297,7 @@ describe("shared/components", () => {
     });
 
     it("renders the footer", () => {
-      const { form } = createForm("Title", [], "Footer");
+      const { form } = createForm("Title", [], { footer: "Footer" });
 
       const lines = form.render(45);
 
@@ -252,24 +305,22 @@ describe("shared/components", () => {
     });
 
     it("renders the default spacing between all children", () => {
-      const { form } = createForm(
-        "Title",
-        [new TestField("field-1"), new TestField("field-2")],
-        "Footer",
-      );
+      const { form } = createForm("Title", [
+        new TestField("field-1"),
+        new TestField("field-2"),
+      ]);
 
       const lines = form.render(45);
       const emptyLineCount = lines.filter((line) => line === "").length;
 
-      expect(emptyLineCount).toBe(6);
+      expect(emptyLineCount).toBe(4);
     });
 
     it("renders custom spacing between all children", () => {
       const { form } = createForm(
         "Title",
         [new TestField("field-1"), new TestField("field-2")],
-        "Footer",
-        1,
+        { footer: "Footer", spacing: 1 },
       );
 
       const lines = form.render(45);
