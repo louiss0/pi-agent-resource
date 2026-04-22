@@ -175,6 +175,53 @@ describe("shared/components", () => {
       return { form, tui, done };
     }
 
+    it("submits a object with the correct values based on names ", () => {
+      const { form, done } = createForm("Title", [
+        new TestField("field-1"),
+        new TestField("field-2"),
+      ]);
+
+      form.handleInput("a");
+      form.handleInput(Key.enter);
+      form.handleInput("b");
+      form.handleInput(Key.enter);
+
+      expect(done).toHaveBeenCalledWith({ "field-1": "a", "field-2": "b" });
+    });
+
+    it("submits a object with the correct values based on names with booleans", () => {
+      const { form, done } = createForm("Title", [
+        new TestField("field-1"),
+        new TestField("field-2"),
+        new TestConfirmationBox("field-3", "Confirm"),
+      ]);
+
+      form.handleInput("a");
+      form.handleInput(Key.enter);
+      form.handleInput("b");
+      form.handleInput(Key.enter);
+      form.handleInput(Key.enter);
+
+      expect(done).toHaveBeenCalledWith({ "field-1": "a", "field-2": "b", "field-3": false });
+    });
+
+    it("submits a object with the correct values based on names with that have changed", () => {
+      const { form, done } = createForm("Title", [
+        new TestField("field-1"),
+        new TestField("field-2"),
+        new TestConfirmationBox("field-3", "Confirm"),
+      ]);
+
+      form.handleInput("a");
+      form.handleInput(Key.enter);
+      form.handleInput("b");
+      form.handleInput(Key.enter);
+      form.handleInput(Key.space);
+      form.handleInput(Key.enter);
+
+      expect(done).toHaveBeenCalledWith({ "field-1": "a", "field-2": "b", "field-3": true });
+    });
+
     it("renders the title centered", () => {
       const { form } = createForm("Title", []);
 
