@@ -172,8 +172,6 @@ export class Form<T extends Record<string, string | number | boolean>>
   #focused = false;
   #hasValidationErrors = false;
   #fields: FormField[];
-  #titleText: Text;
-  #footerText: Text;
   #spacing: number;
   #title: string;
   #footer: string;
@@ -192,14 +190,7 @@ export class Form<T extends Record<string, string | number | boolean>>
 
     this.#fields = options.fields;
     this.#spacing = options.spacing ?? 2;
-    this.#titleText = new Text(this.#title);
-    this.#footerText = new Text(this.#footer);
-
-    const children: Component[] = [this.#titleText, ...this.#fields];
-
-    if (this.#footer.length > 0) {
-      children.push(this.#footerText);
-    }
+    const children: Component[] = this.#fields;
 
     children.forEach((child, index) => {
       this.addChild(child);
@@ -220,12 +211,15 @@ export class Form<T extends Record<string, string | number | boolean>>
   }
 
   override render(width: number): string[] {
-    const lines = super.render(width);
+    const lines = [this.#centerLine(this.#title, width)];
+    const fieldLines = super.render(width);
 
-    lines[0] = this.#centerLine(this.#title, width);
+    if (fieldLines.length > 0) {
+      lines.push(...this.#spacingLines(), ...fieldLines);
+    }
 
     if (this.#footer.length > 0) {
-      lines[lines.length - 1] = truncateToWidth(this.#footer, width);
+      lines.push(...this.#spacingLines(), truncateToWidth(this.#footer, width));
     }
 
     return lines;
@@ -344,5 +338,9 @@ export class Form<T extends Record<string, string | number | boolean>>
     const leftPaddingWidth = Math.floor((width - text.length) / 2);
     const rightPaddingWidth = width - text.length - leftPaddingWidth;
     return `${" ".repeat(leftPaddingWidth)}${text}${" ".repeat(rightPaddingWidth)}`;
+  }
+
+  #spacingLines() {
+    return Array.from({ length: this.#spacing }, () => "");
   }
 }

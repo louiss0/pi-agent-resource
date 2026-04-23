@@ -375,6 +375,15 @@ describe("shared/components", () => {
       expect(lines.at(-1)).toContain("Footer");
     });
 
+    it("renders the title and footer once", () => {
+      const { form } = createForm("Title", [], { footer: "Footer" });
+
+      const lines = form.render(45);
+
+      expect(lines.filter((line) => line.includes("Title"))).toHaveLength(1);
+      expect(lines.filter((line) => line.includes("Footer"))).toHaveLength(1);
+    });
+
     it("renders the default spacing between all children", () => {
       const { form } = createForm("Title", [
         new TestField("field-1"),
