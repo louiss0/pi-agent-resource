@@ -7,6 +7,10 @@ import type {
 import {
   type Component,
   Container,
+  Editor,
+  type Focusable,
+  Key,
+  matchesKey,
   SelectList,
   Spacer,
   Text,
@@ -81,6 +85,59 @@ type ParsedSkillCommandArgument = {
   subcommand: SkillSubcommand;
   editMode?: SkillEditorMode;
 };
+
+class SkillEditorOverlay extends Container implements Focusable {
+  #editor: Editor;
+  #focused = false;
+  #done: (value: string | undefined) => void;
+
+  get focused() {
+    return this.#focused;
+  }
+
+  set focused(value: boolean) {
+    this.#focused = value;
+    this.#editor.focused = value;
+  }
+
+  constructor(
+    tui: TUI,
+    theme: Theme,
+    initialValue: string,
+    done: (value: string | undefined) => void,
+  ) {
+    super();
+    this.#done = done;
+
+    this.#editor = new Editor(tui, {
+      borderColor: (text) => theme.fg("accent", text),
+      selectList: {
+        selectedPrefix: (text) => theme.fg("accent", text),
+        selectedText: (text) => theme.fg("accent", text),
+        description: (text) => theme.fg("muted", text),
+        scrollInfo: (text) => theme.fg("dim", text),
+        noMatch: (text) => theme.fg("warning", text),
+      },
+    });
+    this.#editor.setText(initialValue);
+    this.#editor.onSubmit = (value) => done(value);
+
+    this.addChild(new Text(theme.fg("accent", "Edit Skill Markdown")));
+    this.addChild(new Spacer(1));
+    this.addChild(this.#editor);
+    this.addChild(new Spacer(1));
+    this.addChild(new Text(theme.fg("dim", "Enter submit | Shift+Enter newline | Esc cancel")));
+  }
+
+  handleInput(data: string) {
+    if (matchesKey(data, Key.escape)) {
+      this.#done(undefined);
+      return;
+    }
+
+    this.#editor.handleInput(data);
+  }
+}
 
 function createRequiredSkillForm(
   tui: TUI,
@@ -227,7 +284,17 @@ export async function handleEdit(
 
     await openExternalEditor(editor, skillPath);
   } else {
-    const editedContent = await ctx.ui.editor("Edit Skill Markdown", currentContent);
+    const editedContent = await ctx.ui.custom<string | undefined>(
+      (tui, theme, _kb, done) => new SkillEditorOverlay(tui, theme, currentContent, done),
+      {
+        overlay: true,
+        overlayOptions: {
+          anchor: "center",
+          width: "80%",
+          maxHeight: "80%",
+        },
+      },
+    );
 
     if (editedContent === undefined) {
       ctx.ui.notify("Skill edit cancelled", "info");
