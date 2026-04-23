@@ -115,6 +115,17 @@ describe("Skill Creator", () => {
         errorMessage: "Unknown flag: --pi-editor",
       });
     });
+
+    it("rejects --external for non-edit subcommands", () => {
+      expect(parseSkillCommandArgument("create --external")).toEqual({
+        success: false,
+        errorMessage: "--external can only be used with edit",
+      });
+      expect(parseSkillCommandArgument("delete --external")).toEqual({
+        success: false,
+        errorMessage: "--external can only be used with edit",
+      });
+    });
   });
 
   describe("readProjectEditorConfig", () => {
@@ -539,7 +550,46 @@ describe("Skill Creator", () => {
 
       expect(spawn).toHaveBeenCalledWith("nvim", [
         "/test-home/.pi/agents/skills/test-skill/SKILL.md",
-      ], expect.objectContaining({ shell: true }));
+      ], expect.objectContaining({ shell: false }));
+      expect(spawn).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ shell: true }),
+      );
+      expect(reload).toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith("Skill updated. Reloading skills...", "info");
+      vi.unstubAllEnvs();
+    });
+
+    it("passes editor arguments without shell parsing", async () => {
+      vi.mocked(readdir).mockResolvedValueOnce([
+        { isDirectory: () => true, name: "test-skill" },
+      ] as never);
+      vi.mocked(readFile).mockResolvedValueOnce("existing skill content");
+      vi.mocked(spawn).mockReturnValueOnce({
+        on: (event: string, callback: (value?: number) => void) => {
+          if (event === "exit") {
+            callback(0);
+          }
+        },
+      } as never);
+      vi.stubEnv("VISUAL", "code --wait");
+      const notify = vi.fn();
+      const reload = vi.fn().mockResolvedValueOnce(undefined);
+
+      await handleEdit({
+        ui: {
+          custom: vi.fn().mockResolvedValueOnce(expectedSkillPath),
+          notify,
+        },
+        reload,
+      } as never, "external");
+
+      expect(spawn).toHaveBeenCalledWith(
+        "code",
+        ["--wait", expectedSkillPath],
+        expect.objectContaining({ shell: false }),
+      );
       expect(reload).toHaveBeenCalled();
       expect(notify).toHaveBeenCalledWith("Skill updated. Reloading skills...", "info");
       vi.unstubAllEnvs();

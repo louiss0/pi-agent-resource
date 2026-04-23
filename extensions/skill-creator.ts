@@ -586,8 +586,6 @@ export function parseSkillCommandArgument(argument: string) {
     };
   }
 
-  const hasExternalFlag = flags.includes("--external");
-
   for (const flag of flags) {
     if (flag !== "--external") {
       return {
@@ -597,11 +595,18 @@ export function parseSkillCommandArgument(argument: string) {
     }
   }
 
+  if (flags.includes("--external") && subcommandResult.output !== "edit") {
+    return {
+      success: false as const,
+      errorMessage: "--external can only be used with edit",
+    };
+  }
+
   return {
     success: true as const,
     output: {
       subcommand: subcommandResult.output,
-      editMode: hasExternalFlag ? "external" : undefined,
+      editMode: flags.includes("--external") ? "external" : undefined,
     } satisfies ParsedSkillCommandArgument,
   };
 }
@@ -875,8 +880,13 @@ export async function listSkillNames() {
 }
 
 export function openExternalEditor(editor: string, filePath: string) {
+  const editorCommand = parseExternalEditorCommand(editor);
+
   return new Promise<void>((resolve, reject) => {
-    const child = spawn(editor, [filePath], { stdio: "inherit", shell: true });
+    const child = spawn(editorCommand.command, [...editorCommand.args, filePath], {
+      stdio: "inherit",
+      shell: false,
+    });
 
     child.on("error", reject);
     child.on("exit", (code) => {
@@ -888,6 +898,17 @@ export function openExternalEditor(editor: string, filePath: string) {
       reject(new Error(`Editor exited with code ${code ?? "unknown"}`));
     });
   });
+}
+
+function parseExternalEditorCommand(editor: string) {
+  const parts = editor.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? [];
+  const [command, ...args] = parts.map((part) => part.replace(/^['"]|['"]$/g, ""));
+
+  if (!command) {
+    throw new Error("Set $VISUAL or $EDITOR to edit skills");
+  }
+
+  return { command, args };
 }
 
 export async function readSkillFile(filePath: string) {
