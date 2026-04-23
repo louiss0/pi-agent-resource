@@ -67,7 +67,7 @@ describe("shared/components", () => {
     it("renders unchecked by default", () => {
       const theme = createTheme();
       const checkbox = new ConfirmationBox(theme, "Do you want to fill in the next fields?");
-      const lines = checkbox.render(45).join("\n");
+      const lines = checkbox.render(80).join("\n");
 
       expect(lines).toContain(`  ${theme.getFgAnsi("accent")} [ ]`);
       expect(lines).toContain(" Do you want to fill in the next fields?");
@@ -76,7 +76,7 @@ describe("shared/components", () => {
     it("accepts the display message as the second parameter", () => {
       const theme = createTheme();
       const checkbox = new ConfirmationBox(theme, "Use advanced options?");
-      const lines = checkbox.render(45).join("\n");
+      const lines = checkbox.render(80).join("\n");
 
       expect(lines).toContain(" Use advanced options?");
       expect(lines).not.toContain(" Do you want to fill in the next fields?");
@@ -88,7 +88,7 @@ describe("shared/components", () => {
 
       checkbox.setFocused(true);
 
-      const lines = checkbox.render(45).join("\n");
+      const lines = checkbox.render(80).join("\n");
 
       expect(lines).toContain(`> ${theme.getFgAnsi("accent")} [ ]`);
       expect(lines).toContain(" Do you want to fill in the next fields?");
@@ -101,7 +101,7 @@ describe("shared/components", () => {
       checkbox.setFocused(true);
       checkbox.handleInput(Key.space);
 
-      const lines = checkbox.render(45).join("\n");
+      const lines = checkbox.render(80).join("\n");
 
       expect(lines).toContain(`> ${theme.getFgAnsi("accent")} [x]`);
       expect(lines).toContain(" Do you want to fill in the next fields?");
@@ -114,7 +114,7 @@ describe("shared/components", () => {
       checkbox.handleInput(Key.space);
       checkbox.handleInput(Key.space);
 
-      const lines = checkbox.render(45).join("\n");
+      const lines = checkbox.render(80).join("\n");
 
       expect(lines).toContain(`  ${theme.getFgAnsi("accent")} [ ]`);
       expect(lines).toContain(" Do you want to fill in the next fields?");
@@ -127,7 +127,7 @@ describe("shared/components", () => {
       checkbox.confirm();
       checkbox.confirm();
 
-      const lines = checkbox.render(45).join("\n");
+      const lines = checkbox.render(80).join("\n");
 
       expect(lines).toContain(`  ${theme.getFgAnsi("accent")} [x]`);
       expect(lines).toContain(" Do you want to fill in the next fields?");

@@ -129,7 +129,7 @@ export class ConfirmationBox extends Container implements Component {
   override render(width: number): string[] {
     const prefix = this.#focused ? "> " : "  ";
     const box = this.#theme.fg("accent", ` ${this.#value ? "[x]" : "[ ]"}`);
-    const lines = [`${prefix}${box} ${this.#message}`];
+    const lines = [truncateToWidth(`${prefix}${box} ${this.#message}`, width)];
     const errorLines = this.#errorText.render(width).filter((line) => line.length > 0);
 
     return [...lines, ...errorLines];
