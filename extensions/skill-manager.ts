@@ -180,12 +180,9 @@ export async function handleCreate(ctx: ExtensionCommandContext) {
       formOverlayOptions,
     );
 
-    if (!submittedOptionalValues) {
-      ctx.ui.notify("Skill creation cancelled", "info");
-      return;
+    if (submittedOptionalValues) {
+      optionalValues = submittedOptionalValues;
     }
-
-    optionalValues = submittedOptionalValues;
   }
 
   try {
