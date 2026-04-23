@@ -1,11 +1,10 @@
+import { dirname, join } from "node:path";
 import { Theme } from "@mariozechner/pi-coding-agent";
 import { Key, type TUI } from "@mariozechner/pi-tui";
-import { dirname, join } from "node:path";
 
 vi.mock("@mariozechner/pi-tui", async () => {
-  const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
-    "@mariozechner/pi-tui",
-  );
+  const module =
+    await vi.importActual<typeof import("@mariozechner/pi-tui")>("@mariozechner/pi-tui");
 
   return {
     ...module,
@@ -29,8 +28,8 @@ vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
-import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import skillCreator, {
   ConfirmationBox,
   createSkillFile,
@@ -46,7 +45,14 @@ import skillCreator, {
 } from "./skill-creator";
 
 describe("Skill Creator", () => {
-  const expectedSkillPath = join("/test-home", ".pi", "agents", "skills", "test-skill", "SKILL.md");
+  const expectedSkillPath = join(
+    "/test-home",
+    ".pi",
+    "agents",
+    "skills",
+    "test-skill",
+    "SKILL.md",
+  );
   const expectedSkillDirectory = dirname(expectedSkillPath);
 
   function createTheme(themeOverride?: Theme) {
@@ -64,10 +70,7 @@ describe("Skill Creator", () => {
     } as unknown as TUI;
   }
 
-  function enterText(
-    form: { handleInput: (data: string) => void },
-    text: string,
-  ) {
+  function enterText(form: { handleInput: (data: string) => void }, text: string) {
     for (const character of text) {
       form.handleInput(character);
     }
@@ -347,7 +350,7 @@ describe("Skill Creator", () => {
     it("validates license path compatibility length and comma-separated allowed tools", () => {
       const { form, done } = createOptionalFieldsForm();
 
-      enterText(form, 'bad:path');
+      enterText(form, "bad:path");
       pressKey(form, Key.enter);
       enterText(form, "x".repeat(501));
       pressKey(form, Key.enter);
@@ -438,21 +441,17 @@ describe("Skill Creator", () => {
     });
 
     it("creates the skill and shows the file path when confirm=false", async () => {
-      const custom = vi
-        .fn()
-        .mockResolvedValueOnce({
-          name: "test-skill",
-          description: "Useful skill description",
-          confirm: false,
-        });
+      const custom = vi.fn().mockResolvedValueOnce({
+        name: "test-skill",
+        description: "Useful skill description",
+        confirm: false,
+      });
       const notify = vi.fn();
 
       await handleCreate({ ui: { custom, notify } } as never);
 
       expect(custom).toHaveBeenCalledTimes(1);
-      expect(notify).toHaveBeenCalledWith(
-        `Skill created successfully: ${expectedSkillPath}`,
-      );
+      expect(notify).toHaveBeenCalledWith(`Skill created successfully: ${expectedSkillPath}`);
     });
 
     it("shows the second form and writes optional fields when confirm=true", async () => {
@@ -481,9 +480,7 @@ describe("Skill Creator", () => {
           flag: "wx",
         }),
       );
-      expect(notify).toHaveBeenCalledWith(
-        `Skill created successfully: ${expectedSkillPath}`,
-      );
+      expect(notify).toHaveBeenCalledWith(`Skill created successfully: ${expectedSkillPath}`);
     });
 
     it("cancels creation when the second form is dismissed", async () => {
@@ -509,9 +506,7 @@ describe("Skill Creator", () => {
       vi.mocked(readFile)
         .mockResolvedValueOnce("existing skill content")
         .mockRejectedValueOnce(new Error("missing config"));
-      const custom = vi.fn().mockResolvedValueOnce(
-        expectedSkillPath,
-      );
+      const custom = vi.fn().mockResolvedValueOnce(expectedSkillPath);
       const editor = vi.fn().mockResolvedValueOnce("updated skill content");
       const notify = vi.fn();
       const reload = vi.fn().mockResolvedValueOnce(undefined);
@@ -541,17 +536,17 @@ describe("Skill Creator", () => {
           }
         },
       } as never);
-      const custom = vi.fn().mockResolvedValueOnce(
-        expectedSkillPath,
-      );
+      const custom = vi.fn().mockResolvedValueOnce(expectedSkillPath);
       const notify = vi.fn();
       const reload = vi.fn().mockResolvedValueOnce(undefined);
 
       await handleEdit({ ui: { custom, notify }, reload } as never, "external");
 
-      expect(spawn).toHaveBeenCalledWith("nvim", [
-        expectedSkillPath,
-      ], expect.objectContaining({ shell: false }));
+      expect(spawn).toHaveBeenCalledWith(
+        "nvim",
+        [expectedSkillPath],
+        expect.objectContaining({ shell: false }),
+      );
       expect(spawn).not.toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
@@ -578,13 +573,16 @@ describe("Skill Creator", () => {
       const notify = vi.fn();
       const reload = vi.fn().mockResolvedValueOnce(undefined);
 
-      await handleEdit({
-        ui: {
-          custom: vi.fn().mockResolvedValueOnce(expectedSkillPath),
-          notify,
-        },
-        reload,
-      } as never, "external");
+      await handleEdit(
+        {
+          ui: {
+            custom: vi.fn().mockResolvedValueOnce(expectedSkillPath),
+            notify,
+          },
+          reload,
+        } as never,
+        "external",
+      );
 
       expect(spawn).toHaveBeenCalledWith(
         "code",
@@ -612,17 +610,20 @@ describe("Skill Creator", () => {
       const notify = vi.fn();
       const reload = vi.fn().mockResolvedValueOnce(undefined);
 
-      await handleEdit({
-        ui: {
-          custom: vi.fn().mockResolvedValueOnce(expectedSkillPath),
-          notify,
-        },
-        reload,
-      } as never, "external");
+      await handleEdit(
+        {
+          ui: {
+            custom: vi.fn().mockResolvedValueOnce(expectedSkillPath),
+            notify,
+          },
+          reload,
+        } as never,
+        "external",
+      );
 
       expect(spawn).toHaveBeenCalledWith(
         "nvim",
-        ['+set ft=markdown', "--wait", expectedSkillPath],
+        ["+set ft=markdown", "--wait", expectedSkillPath],
         expect.objectContaining({ shell: false }),
       );
       expect(reload).toHaveBeenCalled();
@@ -634,17 +635,12 @@ describe("Skill Creator", () => {
       vi.mocked(readdir).mockResolvedValueOnce([
         { isDirectory: () => true, name: "test-skill" },
       ] as never);
-      const custom = vi.fn().mockResolvedValueOnce(
-        expectedSkillPath,
-      );
+      const custom = vi.fn().mockResolvedValueOnce(expectedSkillPath);
       const notify = vi.fn();
 
       await handleDelete({ ui: { custom, notify } } as never);
 
-      expect(rm).toHaveBeenCalledWith(
-        expectedSkillDirectory,
-        { force: true, recursive: true },
-      );
+      expect(rm).toHaveBeenCalledWith(expectedSkillDirectory, { force: true, recursive: true });
       expect(notify).toHaveBeenCalledWith(
         `Skill deleted successfully: ${expectedSkillDirectory}`,
       );
