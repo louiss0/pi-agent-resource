@@ -1,4 +1,8 @@
-import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+  Theme,
+} from "@mariozechner/pi-coding-agent";
 import {
   type Component,
   Container,
@@ -39,19 +43,19 @@ export default (pi: ExtensionAPI) => {
     getArgumentCompletions:
       getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("skill"),
     handler: async (arg, ctx) => {
-      const result = SubCommands.parse(arg);
+      const result = parseSkillCommandArgument(arg);
 
       if (!result.success) {
         ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");
         return;
       }
 
-      switch (result.output) {
+      switch (result.output.subcommand) {
         case "create":
           await handleCreate(ctx);
           break;
         case "edit":
-          await handleEdit(ctx);
+          await handleEdit(ctx, result.output.editMode);
           break;
         case "delete":
           await handleDelete(ctx);
@@ -62,6 +66,7 @@ export default (pi: ExtensionAPI) => {
 };
 
 export const SKILLS_DIRECTORY = join(homedir(), ".pi", "agents", "skills");
+export const PROJECT_EDITOR_CONFIG_PATH = join(process.cwd(), ".pi-resource.toml");
 
 const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const pathLikePattern = /^(?:$|~?[/.\\]|[A-Za-z]:[\\/]|\.\.?[\\/]|[^<>:"|?*\r\n]+(?:[\\/][^<>:"|?*\r\n]+)*)$/;
@@ -116,6 +121,15 @@ type OptionalAgentSkillFrontmatterFields = InferOutput<
 type OptionalAgentSkillFormFields = InferOutput<typeof OptionalAgentSkillFormFieldsSchema>;
 export type SkillFrontmatterFields =
   RequiredAgentSkillFields & OptionalAgentSkillFrontmatterFields;
+
+type SkillEditorMode = "pi" | "external";
+
+type SkillSubcommand = "create" | "edit" | "delete";
+
+type ParsedSkillCommandArgument = {
+  subcommand: SkillSubcommand;
+  editMode?: SkillEditorMode;
+};
 
 class LabelledInput extends Container {
   #name: string;
@@ -561,7 +575,46 @@ export class SkillOptionalFieldsForm extends SkillDetailsForm<OptionalAgentSkill
   }
 }
 
-export async function handleCreate(ctx: ExtensionContext) {
+export function parseSkillCommandArgument(argument: string) {
+  const [subcommand, ...flags] = argument.split(/\s+/).filter(Boolean);
+  const subcommandResult = SubCommands.parse(subcommand ?? "");
+
+  if (!subcommandResult.success) {
+    return {
+      success: false as const,
+      errorMessage: subcommandResult.errorMessage,
+    };
+  }
+
+  const hasExternalFlag = flags.includes("--external");
+  const hasPiFlag = flags.includes("--pi-editor");
+
+  if (hasExternalFlag && hasPiFlag) {
+    return {
+      success: false as const,
+      errorMessage: "Use either --external or --pi-editor, not both",
+    };
+  }
+
+  for (const flag of flags) {
+    if (flag !== "--external" && flag !== "--pi-editor") {
+      return {
+        success: false as const,
+        errorMessage: `Unknown flag: ${flag}`,
+      };
+    }
+  }
+
+  return {
+    success: true as const,
+    output: {
+      subcommand: subcommandResult.output,
+      editMode: hasExternalFlag ? "external" : hasPiFlag ? "pi" : undefined,
+    } satisfies ParsedSkillCommandArgument,
+  };
+}
+
+export async function handleCreate(ctx: ExtensionCommandContext) {
   const requiredValues = await ctx.ui.custom<(RequiredAgentSkillFields & { confirm: boolean }) | null>(
     (tui, theme, _kb, done) => new SkillForm(tui, theme, done),
     { overlay: true, overlayOptions: { offsetY: -500 } },
@@ -605,7 +658,10 @@ export async function handleCreate(ctx: ExtensionContext) {
   ctx.ui.notify(`Skill created successfully: ${filePath}`);
 }
 
-export async function handleEdit(ctx: ExtensionContext) {
+export async function handleEdit(
+  ctx: ExtensionCommandContext,
+  requestedEditMode?: SkillEditorMode,
+) {
   const skillPath = await pickSkillPath(ctx, "Edit Skill");
 
   if (!skillPath) {
@@ -613,18 +669,34 @@ export async function handleEdit(ctx: ExtensionContext) {
     return;
   }
 
-  const editor = process.env.VISUAL || process.env.EDITOR;
+  const currentContent = await readSkillFile(skillPath);
+  const editMode = await resolveSkillEditMode(requestedEditMode);
 
-  if (!editor) {
-    ctx.ui.notify("Set $VISUAL or $EDITOR to edit skills", "error");
-    return;
+  if (editMode === "external") {
+    const editor = process.env.VISUAL || process.env.EDITOR;
+
+    if (!editor) {
+      ctx.ui.notify("Set $VISUAL or $EDITOR to edit skills", "error");
+      return;
+    }
+
+    await openExternalEditor(editor, skillPath);
+  } else {
+    const editedContent = await ctx.ui.editor("Edit Skill Markdown", currentContent);
+
+    if (editedContent === undefined) {
+      ctx.ui.notify("Skill edit cancelled", "info");
+      return;
+    }
+
+    await writeFile(skillPath, editedContent, "utf8");
   }
 
-  await openExternalEditor(editor, skillPath);
-  ctx.ui.notify(`Skill edited successfully: ${skillPath}`);
+  ctx.ui.notify("Skill updated. Reloading skills...", "info");
+  await ctx.reload();
 }
 
-export async function handleDelete(ctx: ExtensionContext) {
+export async function handleDelete(ctx: ExtensionCommandContext) {
   const skillPath = await pickSkillPath(ctx, "Delete Skill");
 
   if (!skillPath) {
@@ -634,6 +706,44 @@ export async function handleDelete(ctx: ExtensionContext) {
 
   await rm(skillPath, { force: true });
   ctx.ui.notify(`Skill deleted successfully: ${skillPath}`);
+}
+
+export async function resolveSkillEditMode(requestedEditMode?: SkillEditorMode) {
+  if (requestedEditMode) {
+    return requestedEditMode;
+  }
+
+  const projectConfig = await readProjectEditorConfig();
+  return projectConfig.skillEditor ?? "pi";
+}
+
+export async function readProjectEditorConfig() {
+  try {
+    const config = await readFile(PROJECT_EDITOR_CONFIG_PATH, "utf8");
+    let isInSkillSection = false;
+
+    for (const line of config.split(/\r?\n/)) {
+      const trimmedLine = line.trim();
+
+      if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]")) {
+        isInSkillSection = trimmedLine === "[skill]";
+        continue;
+      }
+
+      if (!isInSkillSection) {
+        continue;
+      }
+
+      const editorMatch = trimmedLine.match(/^editor\s*=\s*"(pi|external)"$/);
+      if (editorMatch) {
+        return { skillEditor: editorMatch[1] as SkillEditorMode };
+      }
+    }
+
+    return { skillEditor: undefined };
+  } catch {
+    return { skillEditor: undefined };
+  }
 }
 
 export async function createSkillFile(fields: SkillFrontmatterFields) {
@@ -659,12 +769,35 @@ export function renderSkillMarkdown(fields: SkillFrontmatterFields) {
 }
 
 function formatYamlValue(value: string) {
+  const yamlSpecialCharacters = [
+    ":",
+    "#",
+    "'",
+    '"',
+    "{",
+    "}",
+    "[",
+    "]",
+    ",",
+    "&",
+    "*",
+    "!",
+    "?",
+    "|",
+    ">",
+    "@",
+    "`",
+    "%",
+  ];
+  const includesYamlSpecialCharacter = yamlSpecialCharacters.some((character) =>
+    value.includes(character),
+  );
   const canUsePlainValue =
     value.length > 0 &&
     !value.includes("\n") &&
     !value.includes("\r") &&
     !/^[\s]|[\s]$/.test(value) &&
-    !/[:#'"{}[],&*!?|>@`%]/.test(value);
+    !includesYamlSpecialCharacter;
 
   if (canUsePlainValue) {
     return value;

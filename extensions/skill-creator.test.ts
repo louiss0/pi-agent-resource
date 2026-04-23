@@ -29,7 +29,7 @@ vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
-import { readdir, rm, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import skillCreator, {
   ConfirmationBox,
@@ -37,7 +37,10 @@ import skillCreator, {
   handleCreate,
   handleDelete,
   handleEdit,
+  parseSkillCommandArgument,
+  readProjectEditorConfig,
   renderSkillMarkdown,
+  resolveSkillEditMode,
   SkillForm,
   SkillOptionalFieldsForm,
 } from "./skill-creator";
@@ -91,6 +94,46 @@ describe("Skill Creator", () => {
           handler: expect.any(Function),
         }),
       );
+    });
+  });
+
+  describe("parseSkillCommandArgument", () => {
+    it("parses edit flags", () => {
+      expect(parseSkillCommandArgument("edit --external")).toEqual({
+        success: true,
+        output: { subcommand: "edit", editMode: "external" },
+      });
+      expect(parseSkillCommandArgument("edit --pi-editor")).toEqual({
+        success: true,
+        output: { subcommand: "edit", editMode: "pi" },
+      });
+    });
+
+    it("rejects unknown and conflicting flags", () => {
+      expect(parseSkillCommandArgument("edit --unknown")).toEqual({
+        success: false,
+        errorMessage: "Unknown flag: --unknown",
+      });
+      expect(parseSkillCommandArgument("edit --external --pi-editor")).toEqual({
+        success: false,
+        errorMessage: "Use either --external or --pi-editor, not both",
+      });
+    });
+  });
+
+  describe("readProjectEditorConfig", () => {
+    it("reads the skill editor from the project TOML file", async () => {
+      vi.mocked(readFile).mockResolvedValueOnce('[skill]\neditor = "external"\n');
+
+      await expect(readProjectEditorConfig()).resolves.toEqual({
+        skillEditor: "external",
+      });
+    });
+
+    it("falls back when the project TOML file is missing", async () => {
+      vi.mocked(readFile).mockRejectedValueOnce(new Error("missing"));
+
+      await expect(resolveSkillEditMode()).resolves.toBe("pi");
     });
   });
 
@@ -425,10 +468,37 @@ describe("Skill Creator", () => {
       expect(notify).toHaveBeenCalledWith("Skill creation cancelled", "info");
     });
 
-    it("opens the external editor from $VISUAL or $EDITOR", async () => {
+    it("uses pi editor by default edits the file and reloads", async () => {
       vi.mocked(readdir).mockResolvedValueOnce([
         { isDirectory: () => true, name: "test-skill" },
       ] as never);
+      vi.mocked(readFile)
+        .mockResolvedValueOnce("existing skill content")
+        .mockRejectedValueOnce(new Error("missing config"));
+      const custom = vi.fn().mockResolvedValueOnce(
+        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+      );
+      const editor = vi.fn().mockResolvedValueOnce("updated skill content");
+      const notify = vi.fn();
+      const reload = vi.fn().mockResolvedValueOnce(undefined);
+
+      await handleEdit({ ui: { custom, editor, notify }, reload } as never);
+
+      expect(editor).toHaveBeenCalledWith("Edit Skill Markdown", "existing skill content");
+      expect(writeFile).toHaveBeenCalledWith(
+        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+        "updated skill content",
+        "utf8",
+      );
+      expect(reload).toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith("Skill updated. Reloading skills...", "info");
+    });
+
+    it("opens the external editor when requested by flag and reloads", async () => {
+      vi.mocked(readdir).mockResolvedValueOnce([
+        { isDirectory: () => true, name: "test-skill" },
+      ] as never);
+      vi.mocked(readFile).mockResolvedValueOnce("existing skill content");
       vi.stubEnv("VISUAL", "nvim");
       vi.mocked(spawn).mockReturnValueOnce({
         on: (event: string, callback: (value?: number) => void) => {
@@ -441,15 +511,15 @@ describe("Skill Creator", () => {
         "/test-home/.pi/agents/skills/test-skill/SKILL.md",
       );
       const notify = vi.fn();
+      const reload = vi.fn().mockResolvedValueOnce(undefined);
 
-      await handleEdit({ ui: { custom, notify } } as never);
+      await handleEdit({ ui: { custom, notify }, reload } as never, "external");
 
       expect(spawn).toHaveBeenCalledWith("nvim", [
         "/test-home/.pi/agents/skills/test-skill/SKILL.md",
       ], expect.objectContaining({ shell: true }));
-      expect(notify).toHaveBeenCalledWith(
-        "Skill edited successfully: /test-home/.pi/agents/skills/test-skill/SKILL.md",
-      );
+      expect(reload).toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith("Skill updated. Reloading skills...", "info");
       vi.unstubAllEnvs();
     });
 
