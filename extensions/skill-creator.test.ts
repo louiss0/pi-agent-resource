@@ -144,7 +144,7 @@ describe("Skill Creator", () => {
         name: "test-skill",
         description: "Useful skill description",
         confirmation: false,
-      } satisfies RequiredSkillFormValues);
+      });
     });
 
     it("should show an error only for the missing description when the name is valid", () => {
@@ -215,7 +215,7 @@ describe("Skill Creator", () => {
         name: "test-skill",
         description: "Test description",
         confirmation: false,
-      } satisfies RequiredSkillFormValues);
+      });
 
       await handler("create", context);
 

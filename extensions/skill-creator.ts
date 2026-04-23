@@ -74,33 +74,7 @@ const RequiredSkillFormSchema = object({
 });
 
 type RequiredAgentSkillFieldsSchema = InferOutput<typeof RequiredAgentSkillFieldsSchema>;
-export type RequiredSkillFormValues = InferOutput<typeof RequiredSkillFormSchema>;
-
-const parseRequiredAgentSkillFields: Parse<RequiredSkillFormValues> = (values) => {
-  const result = safeParse(RequiredAgentSkillFieldsSchema, values);
-
-  if (result.success) {
-    return undefined;
-  }
-
-  const errors = new Map<string, string>();
-
-  for (const issue of result.issues) {
-    const key = issue.path?.[0].key;
-
-    if (typeof key !== "string") {
-      continue;
-    }
-
-    const currentError = errors.get(key);
-    errors.set(key, currentError ? `${currentError}\n${issue.message}` : issue.message);
-  }
-
-  return Object.fromEntries(errors.entries()) as Record<
-    keyof RequiredAgentSkillFieldsSchema,
-    string
-  >;
-};
+type RequiredSkillFormValues = InferOutput<typeof RequiredSkillFormSchema>;
 
 export function createSkillForm(
   tui: TUI,
