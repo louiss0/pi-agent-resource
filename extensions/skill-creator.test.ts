@@ -157,6 +157,24 @@ describe("Skill Creator", () => {
       expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
     });
 
+    it("should clear field errors while the user fixes invalid input", () => {
+      const { form } = createTestSkillForm();
+
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+
+      expect(renderForm(form)).toContain("Name is required");
+      expect(renderForm(form)).toContain("Description is required");
+
+      pressKey(form, Key.up);
+      pressKey(form, Key.up);
+      enterText(form, "test-skill");
+
+      expect(renderForm(form)).not.toContain("Name is required");
+      expect(renderForm(form)).toContain("Description is required");
+    });
+
     it("should mark the confirmation box when space is pressed", () => {
       const { form } = createTestSkillForm();
 

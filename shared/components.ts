@@ -170,6 +170,7 @@ export class Form<T extends Record<string, string | number | boolean>>
 {
   #activeFieldIndex = 0;
   #focused = false;
+  #hasValidationErrors = false;
   #fields: FormField[];
   #titleText: Text;
   #footerText: Text;
@@ -257,6 +258,7 @@ export class Form<T extends Record<string, string | number | boolean>>
     }
 
     this.#fields[this.#activeFieldIndex]?.handleInput(data);
+    this.#revalidateFields();
     this.tui.requestRender();
   }
 
@@ -286,21 +288,44 @@ export class Form<T extends Record<string, string | number | boolean>>
     const parsed = this.#parse(fields);
 
     if (parsed !== undefined) {
-      this.#fields.forEach((field) => {
-        const error = parsed[field.name];
-
-        if (error !== undefined) {
-          field.setError(error);
-          return;
-        }
-
-        field.clearError();
-      });
+      this.#hasValidationErrors = true;
+      this.#syncFieldErrors(parsed);
       this.tui.requestRender();
       return;
     }
 
+    this.#hasValidationErrors = false;
+    this.#syncFieldErrors(undefined);
     this.done(fields);
+  }
+
+  #revalidateFields() {
+    if (!this.#hasValidationErrors) {
+      return;
+    }
+
+    const parsed = this.#parse(this.#getValues());
+
+    if (parsed === undefined) {
+      this.#hasValidationErrors = false;
+      this.#syncFieldErrors(undefined);
+      return;
+    }
+
+    this.#syncFieldErrors(parsed);
+  }
+
+  #syncFieldErrors(parsed: ReturnType<Parse<T>> | undefined) {
+    this.#fields.forEach((field) => {
+      const error = parsed?.[field.name];
+
+      if (error !== undefined) {
+        field.setError(error);
+        return;
+      }
+
+      field.clearError();
+    });
   }
 
   #getValues() {

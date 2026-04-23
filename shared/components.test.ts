@@ -322,6 +322,39 @@ describe("shared/components", () => {
       expect(done).toHaveBeenCalledWith({ "field-1": "a", "field-2": "b", "field-3": true });
     });
 
+    it("revalidates field errors while editing after an invalid submit", () => {
+      const firstField = new TestField("field-1");
+      const secondField = new TestField("field-2");
+      const { form } = createForm("Title", [firstField, secondField], {
+        parse: (values) => {
+          const errors: Record<string, string> = {};
+
+          if (values["field-1"] === "") {
+            errors["field-1"] = "Field 1 is required";
+          }
+
+          if (values["field-2"] === "") {
+            errors["field-2"] = "Field 2 is required";
+          }
+
+          return Object.keys(errors).length > 0 ? errors : undefined;
+        },
+      });
+
+      form.handleInput(Key.enter);
+      form.handleInput(Key.enter);
+
+      expect(form.render(45).join("\n")).toContain("Field 1 is required");
+      expect(form.render(45).join("\n")).toContain("Field 2 is required");
+
+      form.handleInput(Key.up);
+      form.handleInput("a");
+
+      const lines = form.render(45).join("\n");
+      expect(lines).not.toContain("Field 1 is required");
+      expect(lines).toContain("Field 2 is required");
+    });
+
     it("renders the title centered", () => {
       const { form } = createForm("Title", []);
 
