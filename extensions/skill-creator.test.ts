@@ -398,8 +398,31 @@ describe("Skill Creator", () => {
       expect(writeFile).toHaveBeenCalledWith(
         expectedSkillPath,
         expect.stringContaining("# Test Skill"),
-        "utf8",
+        expect.objectContaining({
+          encoding: "utf8",
+          flag: "wx",
+        }),
       );
+    });
+
+    it("refuses to overwrite an existing skill during create", async () => {
+      vi.mocked(writeFile).mockRejectedValueOnce(
+        Object.assign(new Error("exists"), { code: "EEXIST" }),
+      );
+      const notify = vi.fn();
+
+      await handleCreate({
+        ui: {
+          custom: vi.fn().mockResolvedValueOnce({
+            name: "test-skill",
+            description: "Useful skill description",
+            confirm: false,
+          }),
+          notify,
+        },
+      } as never);
+
+      expect(notify).toHaveBeenCalledWith("Skill already exists: test-skill", "error");
     });
 
     it("creates the skill and shows the file path when confirm=false", async () => {
@@ -441,7 +464,10 @@ describe("Skill Creator", () => {
       expect(writeFile).toHaveBeenCalledWith(
         expectedSkillPath,
         expect.stringContaining("allowed-tools: read write"),
-        "utf8",
+        expect.objectContaining({
+          encoding: "utf8",
+          flag: "wx",
+        }),
       );
       expect(notify).toHaveBeenCalledWith(
         `Skill created successfully: ${expectedSkillPath}`,
@@ -531,11 +557,11 @@ describe("Skill Creator", () => {
       await handleDelete({ ui: { custom, notify } } as never);
 
       expect(rm).toHaveBeenCalledWith(
-        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
-        { force: true },
+        "/test-home/.pi/agents/skills/test-skill",
+        { force: true, recursive: true },
       );
       expect(notify).toHaveBeenCalledWith(
-        "Skill deleted successfully: /test-home/.pi/agents/skills/test-skill/SKILL.md",
+        "Skill deleted successfully: /test-home/.pi/agents/skills/test-skill",
       );
     });
   });

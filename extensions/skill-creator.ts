@@ -18,7 +18,7 @@ import {
   type SelectItem,
 } from "@mariozechner/pi-tui";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import {
@@ -641,13 +641,22 @@ export async function handleCreate(ctx: ExtensionCommandContext) {
     };
   }
 
-  const filePath = await createSkillFile({
-    name: requiredValues.name,
-    description: requiredValues.description,
-    ...optionalValues,
-  });
+  try {
+    const filePath = await createSkillFile({
+      name: requiredValues.name,
+      description: requiredValues.description,
+      ...optionalValues,
+    });
 
-  ctx.ui.notify(`Skill created successfully: ${filePath}`);
+    ctx.ui.notify(`Skill created successfully: ${filePath}`);
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      ctx.ui.notify(`Skill already exists: ${requiredValues.name}`, "error");
+      return;
+    }
+
+    throw error;
+  }
 }
 
 export async function handleEdit(
@@ -696,8 +705,9 @@ export async function handleDelete(ctx: ExtensionCommandContext) {
     return;
   }
 
-  await rm(skillPath, { force: true });
-  ctx.ui.notify(`Skill deleted successfully: ${skillPath}`);
+  const skillDirectory = dirname(skillPath);
+  await rm(skillDirectory, { force: true, recursive: true });
+  ctx.ui.notify(`Skill deleted successfully: ${skillDirectory}`);
 }
 
 export async function resolveSkillEditMode(requestedEditMode?: SkillEditorMode) {
@@ -742,7 +752,10 @@ export async function createSkillFile(fields: SkillFrontmatterFields) {
   const skillDirectory = join(SKILLS_DIRECTORY, fields.name);
   const skillPath = join(skillDirectory, "SKILL.md");
   await mkdir(skillDirectory, { recursive: true });
-  await writeFile(skillPath, renderSkillMarkdown(fields), "utf8");
+  await writeFile(skillPath, renderSkillMarkdown(fields), {
+    encoding: "utf8",
+    flag: "wx",
+  });
   return skillPath;
 }
 
@@ -758,6 +771,10 @@ export function renderSkillMarkdown(fields: SkillFrontmatterFields) {
   ].join("\n");
 
   return `${frontmatter}\n\n# ${humanizeSkillName(fields.name)}\n\n${fields.description}\n`;
+}
+
+function isAlreadyExistsError(error: unknown) {
+  return error instanceof Error && "code" in error && error.code === "EEXIST";
 }
 
 function formatYamlValue(value: string) {
