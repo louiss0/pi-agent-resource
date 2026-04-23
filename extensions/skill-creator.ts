@@ -4,28 +4,20 @@ import type {
   RegisteredCommand,
   Theme,
 } from "@mariozechner/pi-coding-agent";
+import { type TUI } from "@mariozechner/pi-tui";
 import {
-  type Component,
-  Container,
-  type Focusable,
-  Input,
-  Key,
-  matchesKey,
-  Spacer,
-  Text,
-  type TUI,
-  truncateToWidth,
-} from "@mariozechner/pi-tui";
-import {
+  boolean,
+  fallback,
   type InferOutput,
   maxLength,
   minLength,
   object,
   pipe,
   regex,
-  safeParse,
   string,
 } from "valibot";
+import { ConfirmationBox, Form, LabelledInput, type Parse } from "../shared/components";
+import { parseObjectErrors } from "../shared/parse";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -66,6 +58,7 @@ export function generateCommandHandlerUsingDeps(
     }
   };
 }
+
 const RequiredAgentSkillFieldsSchema = object({
   name: pipe(
     string(),
@@ -75,277 +68,35 @@ const RequiredAgentSkillFieldsSchema = object({
   description: pipe(string(), minLength(1, "Description is required"), maxLength(255)),
 });
 
+const RequiredSkillFormSchema = object({
+  ...RequiredAgentSkillFieldsSchema.entries,
+  confirmation: fallback(boolean(), false),
+});
+
 type RequiredAgentSkillFieldsSchema = InferOutput<typeof RequiredAgentSkillFieldsSchema>;
+type RequiredSkillFormValues = InferOutput<typeof RequiredSkillFormSchema>;
 
-class LabelledInput extends Container {
-  #name: string;
-  #errorText = new Text("");
-  #input = new Input();
-  #labelText: Text;
-  #theme: Theme;
-
-  constructor(name: string, theme: Theme) {
-    super();
-    this.#name = name;
-    this.#labelText = new Text(name);
-    this.addChild(this.#labelText);
-    this.addChild(this.#input);
-    this.addChild(this.#errorText);
-    this.addChild(new Spacer(1));
-    this.#theme = theme;
-  }
-
-  setError(messages: string[]) {
-    this.#errorText.setText(
-      messages.map((message) => this.#theme.fg("error", message)).join("\n"),
-    );
-  }
-
-  clearError() {
-    this.#errorText.setText("");
-  }
-
-  setFocused(focused: boolean) {
-    this.#input.focused = focused;
-  }
-
-  setLabelTextPrefix(prefix: string) {
-    this.#labelText.setText(this.#theme.fg("accent", `${prefix}${this.#name}`));
-  }
-
-  get name() {
-    return this.#name;
-  }
-
-  get value() {
-    return this.#input.getValue();
-  }
-
-  handleInput(value: string) {
-    this.#input.handleInput(value);
-  }
-}
-
-class ConfirmationBox implements Component {
-  #confirmed = false;
-  #focused = false;
-  #tui: TUI;
-  constructor(tui: TUI) {
-    this.#tui = tui;
-  }
-
-  get confirmed() {
-    return this.#confirmed;
-  }
-
-  setFocused(focused: boolean) {
-    this.#focused = focused;
-  }
-
-  confirm() {
-    if (this.#confirmed) {
-      return;
-    }
-
-    this.#confirmed = true;
-    this.#tui.requestRender();
-  }
-
-  toggle() {
-    this.#confirmed = !this.#confirmed;
-    this.#tui.requestRender();
-  }
-
-  handleInput(data: string): void {
-    if (matchesKey(data, Key.space)) {
-      this.toggle();
-    }
-  }
-
-  render(width: number): string[] {
-    const box = this.#confirmed ? "[x]" : "[ ]";
-    const prefix = this.#focused ? "> " : "  ";
-    return [truncateToWidth(`${prefix}${box} Do you want to fill in the next fields?`, width)];
-  }
-
-  invalidate(): void {}
-}
-
-export class SkillForm extends Container implements Focusable {
-  #activeFieldIndex = 0;
-
-  #requiredAgentSkillFieldsKeys = Object.keys(RequiredAgentSkillFieldsSchema.entries);
-  #labelledInputs: LabelledInput[];
-  #confirmationBox: ConfirmationBox;
-  #done: (value: RequiredAgentSkillFieldsSchema | null) => void;
-  #tui: TUI;
-  #focused = false;
-
-  get focused() {
-    return this.#focused;
-  }
-
-  set focused(value: boolean) {
-    this.#focused = value;
-    this.#syncInputFocus();
-    this.#updateFieldLabels();
-  }
-
-  constructor(
-    tui: TUI,
-    theme: Theme,
-    done: (value: RequiredAgentSkillFieldsSchema | null) => void,
-  ) {
-    super();
-    this.#done = done;
-    this.#tui = tui;
-
-    this.#labelledInputs = this.#requiredAgentSkillFieldsKeys.map(
-      (label) => new LabelledInput(label, theme),
-    );
-    this.#confirmationBox = new ConfirmationBox(tui);
-
-    this.#syncInputFocus();
-
-    for (const field of [
-      new Text(theme.fg("accent", "Create Skill")),
-      new Spacer(1),
-      ...this.#labelledInputs,
-      this.#confirmationBox,
-      new Spacer(1),
-      new Text(theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel")),
-    ]) {
-      this.addChild(field);
-    }
-  }
-
-  handleInput(data: string): void {
-    if (matchesKey(data, Key.escape)) {
-      this.#done(null);
-      return;
-    }
-
-    if (matchesKey(data, Key.tab) || matchesKey(data, Key.down)) {
-      this.#moveFocus(1);
-      return;
-    }
-
-    if (matchesKey(data, Key.shift("tab")) || matchesKey(data, Key.up)) {
-      this.#moveFocus(-1);
-      return;
-    }
-
-    if (this.#activeFieldIndex >= this.#labelledInputs.length) {
-      if (matchesKey(data, Key.space)) {
-        this.#confirmationBox.handleInput(data);
-      }
-
-      if (matchesKey(data, Key.enter)) {
-        this.#submit();
-        this.#tui.requestRender();
-      }
-
-      return;
-    }
-
-    if (matchesKey(data, Key.enter)) {
-      this.#moveFocus(1);
-      return;
-    }
-
-    const activeInput = this.#labelledInputs[this.#activeFieldIndex];
-    activeInput.handleInput(data);
-    this.#validateField(activeInput);
-    this.#tui.requestRender();
-  }
-
-  override invalidate(): void {
-    super.invalidate();
-    this.#updateFieldLabels();
-  }
-
-  #moveFocus(direction: 1 | -1) {
-    this.#activeFieldIndex =
-      (this.#activeFieldIndex + direction + this.#focusableFieldCount) %
-      this.#focusableFieldCount;
-    this.#syncInputFocus();
-    this.#updateFieldLabels();
-    this.#tui.requestRender();
-  }
-
-  get #focusableFieldCount() {
-    return this.#labelledInputs.length + 1;
-  }
-
-  #submit() {
-    const values = this.#getValues();
-    const result = safeParse(RequiredAgentSkillFieldsSchema, values);
-
-    if (!result.success) {
-      this.#labelledInputs.forEach((input) => {
-        const messages = result.issues
-          .filter((issue) => issue.path?.[0].key === input.name)
-          .map((issue) => issue.message);
-
-        if (messages.length > 0) {
-          input.setError(messages);
-          return;
-        }
-
-        input.clearError();
-      });
-
-      this.#tui.requestRender();
-      return;
-    }
-
-    this.#done(result.output);
-  }
-
-  #getValues() {
-    return Object.fromEntries(this.#labelledInputs.map((input) => [input.name, input.value]));
-  }
-
-  #validateField(input: LabelledInput) {
-    const result = safeParse(RequiredAgentSkillFieldsSchema, this.#getValues());
-
-    if (result.success) {
-      input.clearError();
-      return;
-    }
-
-    const messages = result.issues
-      .filter((issue) => issue.path?.[0].key === input.name)
-      .map((issue) => issue.message);
-
-    if (messages.length > 0) {
-      input.setError(messages);
-      return;
-    }
-
-    input.clearError();
-  }
-
-  #syncInputFocus() {
-    this.#labelledInputs.forEach((input, index) => {
-      input.setFocused(this.#focused && index === this.#activeFieldIndex);
-    });
-    this.#confirmationBox.setFocused(
-      this.#focused && this.#activeFieldIndex === this.#labelledInputs.length,
-    );
-  }
-
-  #updateFieldLabels() {
-    this.#labelledInputs.forEach((input, index) => {
-      const isActiveField = this.#focused && index === this.#activeFieldIndex;
-      input.setLabelTextPrefix(isActiveField ? "› " : "  ");
-    });
-  }
+export function createSkillForm(
+  tui: TUI,
+  theme: Theme,
+  done: (value: RequiredSkillFormValues | null) => void,
+) {
+  return new Form<RequiredSkillFormValues>(tui, done, {
+    title: "Create Skill",
+    fields: [
+      new LabelledInput("name", theme),
+      new LabelledInput("description", theme),
+      new ConfirmationBox(theme, "Do you want to fill in the next fields?", "confirmation"),
+    ],
+    parse: (values) => parseObjectErrors(RequiredSkillFormSchema, values),
+    footer: theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel"),
+    spacing: 1,
+  });
 }
 
 async function handleCreate(ctx: ExtensionContext) {
-  const formValues = await ctx.ui.custom<RequiredAgentSkillFieldsSchema | null>(
-    (tui, theme, _kb, done) => new SkillForm(tui, theme, done),
+  const formValues = await ctx.ui.custom<RequiredSkillFormValues | null>(
+    (tui, theme, _kb, done) => createSkillForm(tui, theme, done),
     { overlay: true, overlayOptions: { offsetY: -500 } },
   );
 

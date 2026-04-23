@@ -12,10 +12,14 @@ vi.mock("@mariozechner/pi-tui", async () => {
 });
 
 import { SubCommands } from "../shared/subcommands";
-import { generateCommandHandlerUsingDeps, SkillForm } from "./skill-creator";
+import { createSkillForm, generateCommandHandlerUsingDeps } from "./skill-creator";
+
+type SkillForm = ReturnType<typeof createSkillForm>;
+const uncheckedConfirmationText = "[ ] Do you want to fill in the next";
+const checkedConfirmationText = "[x] Do you want to fill in the next";
 
 describe("Skill Creator", () => {
-  function createSkillForm(themeOverride?: Theme) {
+  function createTestSkillForm(themeOverride?: Theme) {
     const done = vi.fn();
     const tui = {
       requestRender: vi.fn(),
@@ -25,7 +29,7 @@ describe("Skill Creator", () => {
       ({
         fg: (_color: string, text: string) => text,
       } as unknown as Theme);
-    const form = new SkillForm(tui, theme, done);
+    const form = createSkillForm(tui, theme, done);
 
     form.focused = true;
 
@@ -54,14 +58,14 @@ describe("Skill Creator", () => {
     form.handleInput(key);
   }
 
-  describe("SkillForm", () => {
+  describe("createSkillForm", () => {
     it("renders a skill form", () => {
-      const { form } = createSkillForm();
+      const { form } = createTestSkillForm();
       assertInitialFormRender(renderFormLines, form, findLineIndex);
     });
 
     it("should show errors under both inputs only after an invalid submit", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       expect(renderForm(form)).not.toContain("Name is required");
       expect(renderForm(form)).not.toContain("Description is required");
@@ -91,7 +95,7 @@ describe("Skill Creator", () => {
       expect(nameErrorIndex).toBeLessThan(descriptionLabelIndex);
       expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
       expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
-      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
+      expect(renderForm(form)).toContain(uncheckedConfirmationText);
     });
 
     it("should render validation errors using the error theme color", () => {
@@ -104,7 +108,7 @@ describe("Skill Creator", () => {
         {} as ConstructorParameters<typeof Theme>[1],
         "truecolor",
       );
-      const { form } = createSkillForm(theme);
+      const { form } = createTestSkillForm(theme);
 
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
@@ -122,7 +126,7 @@ describe("Skill Creator", () => {
     });
 
     it("should submit the entered values with the correct field mapping", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       enterText(form, "test-skill");
       pressKey(form, Key.enter);
@@ -137,11 +141,12 @@ describe("Skill Creator", () => {
       expect(done).toHaveBeenCalledWith({
         name: "test-skill",
         description: "Useful skill description",
+        confirmation: false,
       });
     });
 
     it("should show an error only for the missing description when the name is valid", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       enterText(form, "test-skill");
       pressKey(form, Key.enter);
@@ -151,21 +156,39 @@ describe("Skill Creator", () => {
       expect(done).not.toHaveBeenCalled();
       expect(renderForm(form)).not.toContain("Name is required");
       expect(renderForm(form)).toContain("Description is required");
-      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
+      expect(renderForm(form)).toContain(uncheckedConfirmationText);
+    });
+
+    it("should clear field errors while the user fixes invalid input", () => {
+      const { form } = createTestSkillForm();
+
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+
+      expect(renderForm(form)).toContain("Name is required");
+      expect(renderForm(form)).toContain("Description is required");
+
+      pressKey(form, Key.up);
+      pressKey(form, Key.up);
+      enterText(form, "test-skill");
+
+      expect(renderForm(form)).not.toContain("Name is required");
+      expect(renderForm(form)).toContain("Description is required");
     });
 
     it("should mark the confirmation box when space is pressed", () => {
-      const { form } = createSkillForm();
+      const { form } = createTestSkillForm();
 
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
       pressKey(form, Key.space);
 
-      expect(renderForm(form)).toContain("[x] Do you want to fill in the next fields?");
+      expect(renderForm(form)).toContain(checkedConfirmationText);
     });
 
     it("should allow cancelling even when the active field is invalid", () => {
-      const { form, done } = createSkillForm();
+      const { form, done } = createTestSkillForm();
 
       pressKey(form, Key.escape);
 
@@ -207,6 +230,7 @@ describe("Skill Creator", () => {
       vi.mocked(context.ui.custom).mockResolvedValueOnce({
         name: "test-skill",
         description: "Test description",
+        confirmation: false,
       });
 
       await handler("create", context);
@@ -246,7 +270,7 @@ function assertInitialFormRender(
 ) {
   const lines = renderFormLines(form);
   const createSkillIndex = findLineIndex(lines, "Create Skill");
-  expect(createSkillIndex).toBe(1);
+  expect(createSkillIndex).toBe(0);
   const nameLabelIndex = findLineIndex(lines, "name");
   const descriptionLabelIndex = findLineIndex(lines, "description");
   const inputIndexes = lines
@@ -255,7 +279,7 @@ function assertInitialFormRender(
 
   const confirmNextFieldsLabelIndex = findLineIndex(
     lines,
-    "[ ] Do you want to fill in the next fields?",
+    uncheckedConfirmationText,
   );
 
   expect(inputIndexes).toHaveLength(2);
