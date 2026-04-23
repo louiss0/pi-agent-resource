@@ -12,11 +12,7 @@ vi.mock("@mariozechner/pi-tui", async () => {
 });
 
 import { SubCommands } from "../shared/subcommands";
-import {
-  createSkillForm,
-  generateCommandHandlerUsingDeps,
-  type RequiredSkillFormValues,
-} from "./skill-creator";
+import { createSkillForm, generateCommandHandlerUsingDeps } from "./skill-creator";
 
 type SkillForm = ReturnType<typeof createSkillForm>;
 

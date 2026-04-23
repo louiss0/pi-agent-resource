@@ -4,7 +4,7 @@ import type {
   RegisteredCommand,
   Theme,
 } from "@mariozechner/pi-coding-agent";
-import { Key, matchesKey, type TUI } from "@mariozechner/pi-tui";
+import { type TUI } from "@mariozechner/pi-tui";
 import {
   boolean,
   fallback,
@@ -14,10 +14,10 @@ import {
   object,
   pipe,
   regex,
-  safeParse,
   string,
 } from "valibot";
 import { ConfirmationBox, Form, LabelledInput, type Parse } from "../shared/components";
+import { parseObjectErrors } from "../shared/parse";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -57,7 +57,7 @@ export function generateCommandHandlerUsingDeps(
         break;
     }
   };
-};
+}
 
 const RequiredAgentSkillFieldsSchema = object({
   name: pipe(
@@ -81,19 +81,14 @@ export function createSkillForm(
   theme: Theme,
   done: (value: RequiredSkillFormValues | null) => void,
 ) {
-  const labelledInputs = Object.keys(RequiredAgentSkillFieldsSchema.entries).map(
-    (label) => new LabelledInput(label, theme),
-  );
-  const confirmationBox = new ConfirmationBox(
-    theme,
-    "Do you want to fill in the next fields?",
-    "confirmation",
-  );
-
   return new Form<RequiredSkillFormValues>(tui, done, {
     title: "Create Skill",
-    fields: [...labelledInputs, confirmationBox],
-    parse: parseRequiredAgentSkillFields,
+    fields: [
+      new LabelledInput("name", theme),
+      new LabelledInput("description", theme),
+      new ConfirmationBox(theme, "Do you want to fill in the next fields?", "confirmation"),
+    ],
+    parse: (values) => parseObjectErrors(RequiredSkillFormSchema, values),
     footer: theme.fg("dim", "Enter next/submit • Tab switch field • Esc cancel"),
     spacing: 1,
   });
