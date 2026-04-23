@@ -43,6 +43,10 @@ describe("skill manager handlers", () => {
   function createTui() {
     return {
       requestRender: vi.fn(),
+      terminal: {
+        rows: 40,
+        columns: 120,
+      },
     } as unknown as TUI;
   }
 
@@ -64,6 +68,26 @@ describe("skill manager handlers", () => {
     expect(options).toEqual({
       overlay: true,
       overlayOptions: { offsetY: -500 },
+    });
+  }
+
+  function expectEditorOverlayFactory(custom: ReturnType<typeof vi.fn>, callIndex: number) {
+    const [factory, options] = custom.mock.calls[callIndex] as [
+      (tui: TUI, theme: Theme, keyboard: unknown, done: (value: unknown) => void) => unknown,
+      unknown,
+    ];
+    const component = factory(createTui(), createTheme(), {}, vi.fn());
+
+    expect((component as { render: (width: number) => string[] }).render(80).join("\n")).toContain(
+      "Edit Skill Markdown",
+    );
+    expect(options).toEqual({
+      overlay: true,
+      overlayOptions: {
+        anchor: "center",
+        width: "80%",
+        maxHeight: "80%",
+      },
     });
   }
 
@@ -177,7 +201,7 @@ describe("skill manager handlers", () => {
     expect(notify).toHaveBeenCalledWith("Skill already exists: test-skill", "error");
   });
 
-  it("handleEdit uses Pi's built-in editor by default", async () => {
+  it("handleEdit uses an 80% overlay editor by default", async () => {
     vi.mocked(readdir).mockResolvedValueOnce([{ isDirectory: () => true, name: "test-skill" }] as never);
     vi.mocked(readFile)
       .mockResolvedValueOnce("existing skill content")
@@ -185,13 +209,13 @@ describe("skill manager handlers", () => {
     vi.stubEnv("VISUAL", "code --wait");
     vi.stubEnv("EDITOR", "nvim");
     const custom = vi.fn().mockResolvedValueOnce(expectedSkillPath);
-    const editor = vi.fn().mockResolvedValueOnce("updated skill content");
+    custom.mockResolvedValueOnce("updated skill content");
     const notify = vi.fn();
     const reload = vi.fn().mockResolvedValueOnce(undefined);
 
-    await handleEdit({ ui: { custom, editor, notify }, reload } as never);
+    await handleEdit({ ui: { custom, notify }, reload } as never);
 
-    expect(editor).toHaveBeenCalledWith("Edit Skill Markdown", "existing skill content");
+    expectEditorOverlayFactory(custom, 1);
     expect(spawn).not.toHaveBeenCalled();
     expect(writeFile).toHaveBeenCalledWith(expectedSkillPath, "updated skill content", "utf8");
     expect(reload).toHaveBeenCalled();
