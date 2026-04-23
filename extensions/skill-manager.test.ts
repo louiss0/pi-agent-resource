@@ -135,7 +135,7 @@ describe("skill manager handlers", () => {
     expect(notify).toHaveBeenCalledWith(`Skill created successfully: ${expectedSkillPath}`);
   });
 
-  it("handleCreate cancels when the optional form is dismissed", async () => {
+  it("handleCreate creates the skill when the optional form is dismissed", async () => {
     const custom = vi
       .fn()
       .mockResolvedValueOnce({
@@ -148,8 +148,15 @@ describe("skill manager handlers", () => {
 
     await handleCreate({ ui: { custom, notify } } as never);
 
-    expect(notify).toHaveBeenCalledWith("Skill creation cancelled", "info");
-    expect(writeFile).not.toHaveBeenCalled();
+    expect(writeFile).toHaveBeenCalledWith(
+      expectedSkillPath,
+      expect.stringContaining("# Test Skill"),
+      expect.objectContaining({
+        encoding: "utf8",
+        flag: "wx",
+      }),
+    );
+    expect(notify).toHaveBeenCalledWith(`Skill created successfully: ${expectedSkillPath}`);
   });
 
   it("handleCreate reports an existing skill without overwriting it", async () => {
