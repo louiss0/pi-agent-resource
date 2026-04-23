@@ -122,7 +122,7 @@ type OptionalAgentSkillFormFields = InferOutput<typeof OptionalAgentSkillFormFie
 export type SkillFrontmatterFields =
   RequiredAgentSkillFields & OptionalAgentSkillFrontmatterFields;
 
-type SkillEditorMode = "pi" | "external";
+type SkillEditorMode = "external";
 
 type SkillSubcommand = "create" | "edit" | "delete";
 
@@ -587,17 +587,9 @@ export function parseSkillCommandArgument(argument: string) {
   }
 
   const hasExternalFlag = flags.includes("--external");
-  const hasPiFlag = flags.includes("--pi-editor");
-
-  if (hasExternalFlag && hasPiFlag) {
-    return {
-      success: false as const,
-      errorMessage: "Use either --external or --pi-editor, not both",
-    };
-  }
 
   for (const flag of flags) {
-    if (flag !== "--external" && flag !== "--pi-editor") {
+    if (flag !== "--external") {
       return {
         success: false as const,
         errorMessage: `Unknown flag: ${flag}`,
@@ -609,7 +601,7 @@ export function parseSkillCommandArgument(argument: string) {
     success: true as const,
     output: {
       subcommand: subcommandResult.output,
-      editMode: hasExternalFlag ? "external" : hasPiFlag ? "pi" : undefined,
+      editMode: hasExternalFlag ? "external" : undefined,
     } satisfies ParsedSkillCommandArgument,
   };
 }
@@ -734,7 +726,7 @@ export async function readProjectEditorConfig() {
         continue;
       }
 
-      const editorMatch = trimmedLine.match(/^editor\s*=\s*"(pi|external)"$/);
+      const editorMatch = trimmedLine.match(/^editor\s*=\s*"(external)"$/);
       if (editorMatch) {
         return { skillEditor: editorMatch[1] as SkillEditorMode };
       }

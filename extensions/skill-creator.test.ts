@@ -98,25 +98,21 @@ describe("Skill Creator", () => {
   });
 
   describe("parseSkillCommandArgument", () => {
-    it("parses edit flags", () => {
+    it("parses the external editor flag", () => {
       expect(parseSkillCommandArgument("edit --external")).toEqual({
         success: true,
         output: { subcommand: "edit", editMode: "external" },
       });
-      expect(parseSkillCommandArgument("edit --pi-editor")).toEqual({
-        success: true,
-        output: { subcommand: "edit", editMode: "pi" },
-      });
     });
 
-    it("rejects unknown and conflicting flags", () => {
+    it("rejects unknown flags", () => {
       expect(parseSkillCommandArgument("edit --unknown")).toEqual({
         success: false,
         errorMessage: "Unknown flag: --unknown",
       });
-      expect(parseSkillCommandArgument("edit --external --pi-editor")).toEqual({
+      expect(parseSkillCommandArgument("edit --pi-editor")).toEqual({
         success: false,
-        errorMessage: "Use either --external or --pi-editor, not both",
+        errorMessage: "Unknown flag: --pi-editor",
       });
     });
   });
