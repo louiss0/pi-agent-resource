@@ -18,6 +18,7 @@ export class LabelledInput extends Container implements Component {
   #input = new Input();
   #labelText: Text;
   #theme: Theme;
+
   invalidate(): void {
     this.#labelText.invalidate();
     this.#input.invalidate();
