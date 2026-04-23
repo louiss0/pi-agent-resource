@@ -15,6 +15,8 @@ import { SubCommands } from "../shared/subcommands";
 import { createSkillForm, generateCommandHandlerUsingDeps } from "./skill-creator";
 
 type SkillForm = ReturnType<typeof createSkillForm>;
+const uncheckedConfirmationText = "[ ] Do you want to fill in the next";
+const checkedConfirmationText = "[x] Do you want to fill in the next";
 
 describe("Skill Creator", () => {
   function createTestSkillForm(themeOverride?: Theme) {
@@ -93,7 +95,7 @@ describe("Skill Creator", () => {
       expect(nameErrorIndex).toBeLessThan(descriptionLabelIndex);
       expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
       expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
-      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
+      expect(renderForm(form)).toContain(uncheckedConfirmationText);
     });
 
     it("should render validation errors using the error theme color", () => {
@@ -154,7 +156,7 @@ describe("Skill Creator", () => {
       expect(done).not.toHaveBeenCalled();
       expect(renderForm(form)).not.toContain("Name is required");
       expect(renderForm(form)).toContain("Description is required");
-      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
+      expect(renderForm(form)).toContain(uncheckedConfirmationText);
     });
 
     it("should clear field errors while the user fixes invalid input", () => {
@@ -182,7 +184,7 @@ describe("Skill Creator", () => {
       pressKey(form, Key.enter);
       pressKey(form, Key.space);
 
-      expect(renderForm(form)).toContain("[x] Do you want to fill in the next fields?");
+      expect(renderForm(form)).toContain(checkedConfirmationText);
     });
 
     it("should allow cancelling even when the active field is invalid", () => {
@@ -277,7 +279,7 @@ function assertInitialFormRender(
 
   const confirmNextFieldsLabelIndex = findLineIndex(
     lines,
-    "[ ] Do you want to fill in the next fields?",
+    uncheckedConfirmationText,
   );
 
   expect(inputIndexes).toHaveLength(2);
