@@ -1,6 +1,7 @@
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
+  ExtensionContext,
   Theme,
 } from "@mariozechner/pi-coding-agent";
 import {
@@ -22,6 +23,8 @@ import { dirname, join } from "node:path";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import {
+  type BaseIssue,
+  type GenericSchema,
   type InferOutput,
   maxLength,
   minLength,
@@ -66,7 +69,7 @@ export default (pi: ExtensionAPI) => {
 };
 
 export const SKILLS_DIRECTORY = join(homedir(), ".pi", "agents", "skills");
-export const PROJECT_EDITOR_CONFIG_PATH = join(process.cwd(), ".pi-resource.toml");
+export const PROJECT_EDITOR_CONFIG_FILE = ".pi-resource.toml";
 
 const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const pathLikePattern = /^(?:$|~?[/.\\]|[A-Za-z]:[\\/]|\.\.?[\\/]|[^<>:"|?*\r\n]+(?:[\\/][^<>:"|?*\r\n]+)*)$/;
@@ -238,7 +241,7 @@ class SkillDetailsForm<TValues extends Record<string, string>> extends Container
   #done: (value: TValues | null) => void;
   #tui: TUI;
   #focused = false;
-  #schema: object;
+  #schema: GenericSchema<Record<string, string>, TValues>;
 
   get focused() {
     return this.#focused;
@@ -255,7 +258,7 @@ class SkillDetailsForm<TValues extends Record<string, string>> extends Container
     theme: Theme,
     title: string,
     keys: string[],
-    schema: object,
+    schema: GenericSchema<Record<string, string>, TValues>,
     done: (value: TValues | null) => void,
   ) {
     super();
@@ -331,7 +334,7 @@ class SkillDetailsForm<TValues extends Record<string, string>> extends Container
       return;
     }
 
-    this.#done(result.output as TValues);
+    this.#done(result.output);
   }
 
   #getValues() {
@@ -358,10 +361,10 @@ class SkillDetailsForm<TValues extends Record<string, string>> extends Container
     input.clearError();
   }
 
-  #applyValidationIssues(issues: { path?: { key: string }[]; message: string }[]) {
+  #applyValidationIssues(issues: readonly BaseIssue<unknown>[]) {
     this.#labelledInputs.forEach((input) => {
       const messages = issues
-        .filter((issue) => issue.path?.[0].key === input.name)
+        .filter((issue) => String(issue.path?.[0]?.key) === input.name)
         .map((issue) => issue.message);
 
       if (messages.length > 0) {
@@ -676,7 +679,7 @@ export async function handleEdit(
   }
 
   const currentContent = await readSkillFile(skillPath);
-  const editMode = await resolveSkillEditMode(requestedEditMode);
+  const editMode = await resolveSkillEditMode(requestedEditMode, ctx.cwd || process.cwd());
 
   if (editMode === "external") {
     const editor = process.env.VISUAL || process.env.EDITOR;
@@ -715,18 +718,21 @@ export async function handleDelete(ctx: ExtensionCommandContext) {
   ctx.ui.notify(`Skill deleted successfully: ${skillDirectory}`);
 }
 
-export async function resolveSkillEditMode(requestedEditMode?: SkillEditorMode) {
+export async function resolveSkillEditMode(
+  requestedEditMode?: SkillEditorMode,
+  cwd = process.cwd(),
+) {
   if (requestedEditMode) {
     return requestedEditMode;
   }
 
-  const projectConfig = await readProjectEditorConfig();
+  const projectConfig = await readProjectEditorConfig(cwd);
   return projectConfig.skillEditor ?? "pi";
 }
 
-export async function readProjectEditorConfig() {
+export async function readProjectEditorConfig(cwd = process.cwd()) {
   try {
-    const config = await readFile(PROJECT_EDITOR_CONFIG_PATH, "utf8");
+    const config = await readFile(join(cwd, PROJECT_EDITOR_CONFIG_FILE), "utf8");
     let isInSkillSection = false;
 
     for (const line of config.split(/\r?\n/)) {
@@ -901,14 +907,72 @@ export function openExternalEditor(editor: string, filePath: string) {
 }
 
 function parseExternalEditorCommand(editor: string) {
-  const parts = editor.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? [];
-  const [command, ...args] = parts.map((part) => part.replace(/^['"]|['"]$/g, ""));
+  const parts = tokenizeCommandLine(editor);
+  const [command, ...args] = parts;
 
   if (!command) {
     throw new Error("Set $VISUAL or $EDITOR to edit skills");
   }
 
   return { command, args };
+}
+
+function tokenizeCommandLine(commandLine: string) {
+  const parts: string[] = [];
+  let token = "";
+  let quote: '"' | "'" | null = null;
+
+  for (let index = 0; index < commandLine.length; index += 1) {
+    const character = commandLine[index];
+    const nextCharacter = commandLine[index + 1];
+
+    if (quote) {
+      if (character === "\\" && quote === '"' && (nextCharacter === '"' || nextCharacter === "\\")) {
+        token += nextCharacter;
+        index += 1;
+        continue;
+      }
+
+      if (character === quote) {
+        quote = null;
+        continue;
+      }
+
+      token += character;
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+
+    if (/\s/.test(character)) {
+      if (token.length > 0) {
+        parts.push(token);
+        token = "";
+      }
+      continue;
+    }
+
+    if (character === "\\" && (nextCharacter === '"' || nextCharacter === "'" || nextCharacter === "\\")) {
+      token += nextCharacter;
+      index += 1;
+      continue;
+    }
+
+    token += character;
+  }
+
+  if (quote) {
+    throw new Error("Unterminated quote in $VISUAL or $EDITOR");
+  }
+
+  if (token.length > 0) {
+    parts.push(token);
+  }
+
+  return parts;
 }
 
 export async function readSkillFile(filePath: string) {

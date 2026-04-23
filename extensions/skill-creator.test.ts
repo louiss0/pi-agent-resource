@@ -1,6 +1,6 @@
 import { Theme } from "@mariozechner/pi-coding-agent";
 import { Key, type TUI } from "@mariozechner/pi-tui";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -47,6 +47,7 @@ import skillCreator, {
 
 describe("Skill Creator", () => {
   const expectedSkillPath = join("/test-home", ".pi", "agents", "skills", "test-skill", "SKILL.md");
+  const expectedSkillDirectory = dirname(expectedSkillPath);
 
   function createTheme(themeOverride?: Theme) {
     return (
@@ -509,7 +510,7 @@ describe("Skill Creator", () => {
         .mockResolvedValueOnce("existing skill content")
         .mockRejectedValueOnce(new Error("missing config"));
       const custom = vi.fn().mockResolvedValueOnce(
-        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+        expectedSkillPath,
       );
       const editor = vi.fn().mockResolvedValueOnce("updated skill content");
       const notify = vi.fn();
@@ -519,7 +520,7 @@ describe("Skill Creator", () => {
 
       expect(editor).toHaveBeenCalledWith("Edit Skill Markdown", "existing skill content");
       expect(writeFile).toHaveBeenCalledWith(
-        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+        expectedSkillPath,
         "updated skill content",
         "utf8",
       );
@@ -541,7 +542,7 @@ describe("Skill Creator", () => {
         },
       } as never);
       const custom = vi.fn().mockResolvedValueOnce(
-        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+        expectedSkillPath,
       );
       const notify = vi.fn();
       const reload = vi.fn().mockResolvedValueOnce(undefined);
@@ -549,7 +550,7 @@ describe("Skill Creator", () => {
       await handleEdit({ ui: { custom, notify }, reload } as never, "external");
 
       expect(spawn).toHaveBeenCalledWith("nvim", [
-        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+        expectedSkillPath,
       ], expect.objectContaining({ shell: false }));
       expect(spawn).not.toHaveBeenCalledWith(
         expect.anything(),
@@ -595,23 +596,57 @@ describe("Skill Creator", () => {
       vi.unstubAllEnvs();
     });
 
+    it("preserves quoted editor arguments with embedded spaces", async () => {
+      vi.mocked(readdir).mockResolvedValueOnce([
+        { isDirectory: () => true, name: "test-skill" },
+      ] as never);
+      vi.mocked(readFile).mockResolvedValueOnce("existing skill content");
+      vi.mocked(spawn).mockReturnValueOnce({
+        on: (event: string, callback: (value?: number) => void) => {
+          if (event === "exit") {
+            callback(0);
+          }
+        },
+      } as never);
+      vi.stubEnv("VISUAL", 'nvim +"set ft=markdown" --wait');
+      const notify = vi.fn();
+      const reload = vi.fn().mockResolvedValueOnce(undefined);
+
+      await handleEdit({
+        ui: {
+          custom: vi.fn().mockResolvedValueOnce(expectedSkillPath),
+          notify,
+        },
+        reload,
+      } as never, "external");
+
+      expect(spawn).toHaveBeenCalledWith(
+        "nvim",
+        ['+set ft=markdown', "--wait", expectedSkillPath],
+        expect.objectContaining({ shell: false }),
+      );
+      expect(reload).toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith("Skill updated. Reloading skills...", "info");
+      vi.unstubAllEnvs();
+    });
+
     it("deletes the selected skill from ~/.pi/agents/skills", async () => {
       vi.mocked(readdir).mockResolvedValueOnce([
         { isDirectory: () => true, name: "test-skill" },
       ] as never);
       const custom = vi.fn().mockResolvedValueOnce(
-        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+        expectedSkillPath,
       );
       const notify = vi.fn();
 
       await handleDelete({ ui: { custom, notify } } as never);
 
       expect(rm).toHaveBeenCalledWith(
-        "/test-home/.pi/agents/skills/test-skill",
+        expectedSkillDirectory,
         { force: true, recursive: true },
       );
       expect(notify).toHaveBeenCalledWith(
-        "Skill deleted successfully: /test-home/.pi/agents/skills/test-skill",
+        `Skill deleted successfully: ${expectedSkillDirectory}`,
       );
     });
   });
