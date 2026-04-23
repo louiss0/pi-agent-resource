@@ -1,6 +1,6 @@
 import { safeParse } from "valibot";
 
-export const parseObjectErrors = <T extends Record<string, any>>(
+export const parseObjectErrors = <T extends Record<string, unknown>>(
   schema: Parameters<typeof safeParse>[0],
   values: T,
 ) => {

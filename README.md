@@ -1,9 +1,9 @@
 # pi-agent-resource
 
-A PI package that installs an extension for creating, editing, deleting, and listing project-local:
+A PI package that installs an extension for creating, editing, deleting, and listing:
 
 - Agents in `.pi/agents/*.md`
-- Skills in `.pi/skills/<name>/SKILL.md`
+- Skills in `~/.pi/agents/skills/<name>/SKILL.md`
 - Prompts in `.pi/prompts/*.md` or grouped prompt directories
 
 ## What it does
@@ -18,7 +18,7 @@ It supports:
 - creating grouped prompts with `_index.md` and subcommands
 - editing existing resources
 - deleting existing resources
-- listing current project-local resources
+- listing current resources
 
 ## Installed extension
 
