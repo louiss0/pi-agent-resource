@@ -1,9 +1,11 @@
-import { type ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
-import { CURSOR_MARKER, Key, type TUI } from "@mariozechner/pi-tui";
+import { Theme } from "@mariozechner/pi-coding-agent";
+import { Key, type TUI } from "@mariozechner/pi-tui";
+import { join } from "node:path";
 
 vi.mock("@mariozechner/pi-tui", async () => {
-  const module =
-    await vi.importActual<typeof import("@mariozechner/pi-tui")>("@mariozechner/pi-tui");
+  const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
+    "@mariozechner/pi-tui",
+  );
 
   return {
     ...module,
@@ -11,90 +13,136 @@ vi.mock("@mariozechner/pi-tui", async () => {
   };
 });
 
-import { SubCommands } from "../shared/subcommands";
-import { generateCommandHandlerUsingDeps, SkillForm } from "./skill-creator";
+vi.mock("node:os", () => ({
+  homedir: () => "/test-home",
+}));
+
+vi.mock("node:fs/promises", () => ({
+  mkdir: vi.fn(),
+  readdir: vi.fn(),
+  readFile: vi.fn(),
+  rm: vi.fn(),
+  writeFile: vi.fn(),
+}));
+
+vi.mock("node:child_process", () => ({
+  spawn: vi.fn(),
+}));
+
+import { readdir, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import skillCreator, {
+  ConfirmationBox,
+  createSkillFile,
+  handleCreate,
+  handleDelete,
+  handleEdit,
+  renderSkillMarkdown,
+  SkillForm,
+  SkillOptionalFieldsForm,
+} from "./skill-creator";
 
 describe("Skill Creator", () => {
-  function createSkillForm(themeOverride?: Theme) {
-    const done = vi.fn();
-    const tui = {
-      requestRender: vi.fn(),
-    } as unknown as TUI;
-    const theme =
+  const expectedSkillPath = join("/test-home", ".pi", "agents", "skills", "test-skill", "SKILL.md");
+
+  function createTheme(themeOverride?: Theme) {
+    return (
       themeOverride ??
       ({
         fg: (_color: string, text: string) => text,
-      } as unknown as Theme);
-    const form = new SkillForm(tui, theme, done);
-
-    form.focused = true;
-
-    return { form, done, tui };
+      } as unknown as Theme)
+    );
   }
 
-  function enterText(form: SkillForm, text: string) {
+  function createTui() {
+    return {
+      requestRender: vi.fn(),
+    } as unknown as TUI;
+  }
+
+  function enterText(
+    form: { handleInput: (data: string) => void },
+    text: string,
+  ) {
     for (const character of text) {
       form.handleInput(character);
     }
   }
 
-  function renderForm(form: SkillForm) {
-    return form.render(45).join("\n");
-  }
-
-  function renderFormLines(form: SkillForm) {
-    return form.render(45);
-  }
-
-  function findLineIndex(lines: string[], text: string) {
-    return lines.findIndex((line) => line.includes(text));
-  }
-
-  function pressKey(form: SkillForm, key: string) {
+  function pressKey(form: { handleInput: (data: string) => void }, key: string) {
     form.handleInput(key);
   }
 
+  function render(component: { render: (width: number) => string[] }) {
+    return component.render(60).join("\n");
+  }
+
+  describe("registration", () => {
+    it("registers an inline handler for resource:skill", () => {
+      const registerCommand = vi.fn();
+
+      skillCreator({ registerCommand } as never);
+
+      expect(registerCommand).toHaveBeenCalledTimes(1);
+      expect(registerCommand).toHaveBeenCalledWith(
+        "resource:skill",
+        expect.objectContaining({
+          description: "This is for creating a new skill",
+          handler: expect.any(Function),
+        }),
+      );
+    });
+  });
+
+  describe("ConfirmationBox", () => {
+    it("renders and clears checkbox error messages", () => {
+      const theme = new Theme(
+        {
+          error: "#ff0000",
+          accent: "#00ffff",
+          dim: "#888888",
+        } as ConstructorParameters<typeof Theme>[0],
+        {} as ConstructorParameters<typeof Theme>[1],
+        "truecolor",
+      );
+      const confirmationBox = new ConfirmationBox(createTui(), theme);
+
+      confirmationBox.setFocused(true);
+      confirmationBox.setError(["Pick yes or no"]);
+      expect(render(confirmationBox)).toContain("Pick yes or no");
+
+      confirmationBox.clearError();
+      expect(render(confirmationBox)).not.toContain("Pick yes or no");
+    });
+  });
+
   describe("SkillForm", () => {
+    function createSkillForm(themeOverride?: Theme) {
+      const done = vi.fn();
+      const form = new SkillForm(createTui(), createTheme(themeOverride), done);
+      form.focused = true;
+      return { form, done };
+    }
+
     it("renders a skill form", () => {
       const { form } = createSkillForm();
-      assertInitialFormRender(renderFormLines, form, findLineIndex);
+      expect(render(form)).toContain("Create Skill");
+      expect(render(form)).toContain("[ ] Do you want to fill in the next fields?");
     });
 
-    it("should show errors under both inputs only after an invalid submit", () => {
+    it("shows required field errors only after invalid submit", () => {
       const { form, done } = createSkillForm();
-
-      expect(renderForm(form)).not.toContain("Name is required");
-      expect(renderForm(form)).not.toContain("Description is required");
 
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
 
       expect(done).not.toHaveBeenCalled();
-      const lines = renderFormLines(form);
-      const nameLabelIndex = findLineIndex(lines, "name");
-      const descriptionLabelIndex = findLineIndex(lines, "description");
-      const inputIndexes = lines
-        .map((line, index) => (line.includes(">") ? index : -1))
-        .filter((index) => index > -1);
-
-      expect(inputIndexes).toHaveLength(3);
-
-      const nameErrorIndex = findLineIndex(lines, "Name is required");
-      const descriptionErrorIndex = findLineIndex(lines, "Description is required");
-
-      const [nameInputIndex, descriptionInputIndex] = inputIndexes;
-      expect(nameLabelIndex).toBeGreaterThan(-1);
-      expect(descriptionLabelIndex).toBeGreaterThan(nameLabelIndex);
-      expect(nameInputIndex).toBeGreaterThan(nameLabelIndex);
-      expect(nameErrorIndex).toBeGreaterThan(nameInputIndex);
-      expect(nameErrorIndex).toBeLessThan(descriptionLabelIndex);
-      expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
-      expect(descriptionErrorIndex).toBeGreaterThan(descriptionInputIndex);
-      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
+      expect(render(form)).toContain("Name is required");
+      expect(render(form)).toContain("Description is required");
     });
 
-    it("should render validation errors using the error theme color", () => {
+    it("renders validation errors using the error theme color", () => {
       const theme = new Theme(
         {
           error: "#ff0000",
@@ -110,61 +158,96 @@ describe("Skill Creator", () => {
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
 
-      const lines = renderFormLines(form);
-      const nameErrorLine = lines.find((line) => line.includes("Name is required"));
-      const descriptionErrorLine = lines.find((line) =>
-        line.includes("Description is required"),
-      );
-      const errorAnsi = theme.getFgAnsi("error");
-
-      expect(nameErrorLine).toContain(`${errorAnsi}Name is required`);
-      expect(descriptionErrorLine).toContain(`${errorAnsi}Description is required`);
+      expect(render(form)).toContain(`${theme.getFgAnsi("error")}Name is required`);
+      expect(render(form)).toContain(`${theme.getFgAnsi("error")}Description is required`);
     });
 
-    it("should submit the entered values with the correct field mapping", () => {
+    it("submits entered values and confirm=false when checkbox is untouched", () => {
       const { form, done } = createSkillForm();
 
       enterText(form, "test-skill");
       pressKey(form, Key.enter);
       enterText(form, "Useful skill description");
-
-      expect(renderForm(form)).toContain("test-skill");
-      expect(renderForm(form)).toContain("Useful skill description");
-
       pressKey(form, Key.enter);
       pressKey(form, Key.enter);
 
       expect(done).toHaveBeenCalledWith({
         name: "test-skill",
         description: "Useful skill description",
+        confirm: false,
       });
     });
 
-    it("should show an error only for the missing description when the name is valid", () => {
+    it("submits confirm=true when the checkbox is selected", () => {
       const { form, done } = createSkillForm();
 
       enterText(form, "test-skill");
       pressKey(form, Key.enter);
-      pressKey(form, Key.enter);
-      pressKey(form, Key.enter);
-
-      expect(done).not.toHaveBeenCalled();
-      expect(renderForm(form)).not.toContain("Name is required");
-      expect(renderForm(form)).toContain("Description is required");
-      expect(renderForm(form)).toContain("[ ] Do you want to fill in the next fields?");
-    });
-
-    it("should mark the confirmation box when space is pressed", () => {
-      const { form } = createSkillForm();
-
-      pressKey(form, Key.enter);
+      enterText(form, "Useful skill description");
       pressKey(form, Key.enter);
       pressKey(form, Key.space);
+      pressKey(form, Key.enter);
 
-      expect(renderForm(form)).toContain("[x] Do you want to fill in the next fields?");
+      expect(done).toHaveBeenCalledWith({
+        name: "test-skill",
+        description: "Useful skill description",
+        confirm: true,
+      });
     });
 
-    it("should allow cancelling even when the active field is invalid", () => {
+    it("accepts a 164-character name and rejects a longer name", () => {
+      const validName = "a".repeat(164);
+      const invalidName = "a".repeat(165);
+
+      const valid = createSkillForm();
+      enterText(valid.form, validName);
+      pressKey(valid.form, Key.enter);
+      enterText(valid.form, "Description");
+      pressKey(valid.form, Key.enter);
+      pressKey(valid.form, Key.enter);
+      expect(valid.done).toHaveBeenCalledWith({
+        name: validName,
+        description: "Description",
+        confirm: false,
+      });
+
+      const invalid = createSkillForm();
+      enterText(invalid.form, invalidName);
+      pressKey(invalid.form, Key.enter);
+      enterText(invalid.form, "Description");
+      pressKey(invalid.form, Key.enter);
+      pressKey(invalid.form, Key.enter);
+      expect(invalid.done).not.toHaveBeenCalled();
+      expect(render(invalid.form)).toContain("Name must be 164 characters or fewer");
+    });
+
+    it("accepts a 1024-character description and rejects a longer description", () => {
+      const validDescription = "d".repeat(1024);
+      const invalidDescription = "d".repeat(1025);
+
+      const valid = createSkillForm();
+      enterText(valid.form, "test-skill");
+      pressKey(valid.form, Key.enter);
+      enterText(valid.form, validDescription);
+      pressKey(valid.form, Key.enter);
+      pressKey(valid.form, Key.enter);
+      expect(valid.done).toHaveBeenCalledWith({
+        name: "test-skill",
+        description: validDescription,
+        confirm: false,
+      });
+
+      const invalid = createSkillForm();
+      enterText(invalid.form, "test-skill");
+      pressKey(invalid.form, Key.enter);
+      enterText(invalid.form, invalidDescription);
+      pressKey(invalid.form, Key.enter);
+      pressKey(invalid.form, Key.enter);
+      expect(invalid.done).not.toHaveBeenCalled();
+      expect(render(invalid.form)).toContain("Description must be 1024 characters or fewer");
+    });
+
+    it("allows cancelling even when the active field is invalid", () => {
       const { form, done } = createSkillForm();
 
       pressKey(form, Key.escape);
@@ -173,94 +256,221 @@ describe("Skill Creator", () => {
     });
   });
 
-  describe("Testing generateCommandHandlerUsingDeps", () => {
-    let handler: ReturnType<typeof generateCommandHandlerUsingDeps>;
-
-    function createContext() {
-      const context: { ui: Partial<ExtensionCommandContext["ui"]> } = {
-        ui: {
-          notify: vi.fn(),
-          custom: vi.fn(),
-        },
-      };
-
-      return context as unknown as ExtensionCommandContext;
+  describe("SkillOptionalFieldsForm", () => {
+    function createOptionalFieldsForm() {
+      const done = vi.fn();
+      const form = new SkillOptionalFieldsForm(createTui(), createTheme(), done);
+      form.focused = true;
+      return { form, done };
     }
 
-    beforeAll(() => {
-      handler = generateCommandHandlerUsingDeps({});
+    it("allows submitting all optional fields as empty", () => {
+      const { form, done } = createOptionalFieldsForm();
+
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+
+      expect(done).toHaveBeenCalledWith({
+        license: "",
+        compatibility: "",
+        allowedTools: "",
+      });
     });
 
-    it("should notify on invalid command", async () => {
-      const context = createContext();
-      await handler("invalid", context);
+    it("accepts a comma-separated allowed tools list", () => {
+      const { form, done } = createOptionalFieldsForm();
 
-      expect(context.ui.notify).toHaveBeenCalledWith(
-        'Invalid command: × Invalid type: Expected ("create" | "edit" | "delete") but received "invalid"',
-        "error",
+      pressKey(form, Key.enter);
+      pressKey(form, Key.enter);
+      enterText(form, "read, write, bash");
+      pressKey(form, Key.enter);
+
+      expect(done).toHaveBeenCalledWith({
+        license: "",
+        compatibility: "",
+        allowedTools: "read, write, bash",
+      });
+    });
+
+    it("validates license path compatibility length and comma-separated allowed tools", () => {
+      const { form, done } = createOptionalFieldsForm();
+
+      enterText(form, 'bad:path');
+      pressKey(form, Key.enter);
+      enterText(form, "x".repeat(501));
+      pressKey(form, Key.enter);
+      enterText(form, "bash read");
+      pressKey(form, Key.enter);
+
+      expect(done).not.toHaveBeenCalled();
+      expect(render(form)).toContain("License must be a valid path");
+      expect(render(form)).toContain("Compatibility must be 500 characters or fewer");
+      expect(render(form)).toContain("Allowed tools must be a comma-separated list");
+    });
+  });
+
+  describe("file operations", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("renders a skill markdown file with optional frontmatter fields", () => {
+      const markdown = renderSkillMarkdown({
+        name: "test-skill",
+        description: "Useful skill description",
+        license: "./LICENSE",
+        compatibility: "pi >= 0.67",
+        allowedTools: "read write",
+      });
+
+      expect(markdown).toContain("name: test-skill");
+      expect(markdown).toContain("description: Useful skill description");
+      expect(markdown).toContain("license: ./LICENSE");
+      expect(markdown).toContain("compatibility: 'pi >= 0.67'");
+      expect(markdown).toContain("allowed-tools: read write");
+    });
+
+    it("quotes YAML-sensitive frontmatter values", () => {
+      const markdown = renderSkillMarkdown({
+        name: "test-skill",
+        description: "Handles: yaml # safely",
+        license: "./it's-license",
+        compatibility: " needs wrapping ",
+        allowedTools: "read write",
+      });
+
+      expect(markdown).toContain("description: 'Handles: yaml # safely'");
+      expect(markdown).toContain("license: './it''s-license'");
+      expect(markdown).toContain("compatibility: ' needs wrapping '");
+      expect(markdown).toContain("allowed-tools: read write");
+    });
+
+    it("creates skills in ~/.pi/agents/skills/<name>/SKILL.md", async () => {
+      const filePath = await createSkillFile({
+        name: "test-skill",
+        description: "Useful skill description",
+        license: "",
+        compatibility: "",
+        allowedTools: "",
+      });
+
+      expect(filePath).toBe(expectedSkillPath);
+      expect(writeFile).toHaveBeenCalledWith(
+        expectedSkillPath,
+        expect.stringContaining("# Test Skill"),
+        "utf8",
       );
     });
 
-    it(`should work when ${SubCommands.CREATE} is called`, async () => {
-      const context = createContext();
+    it("creates the skill and shows the file path when confirm=false", async () => {
+      const custom = vi
+        .fn()
+        .mockResolvedValueOnce({
+          name: "test-skill",
+          description: "Useful skill description",
+          confirm: false,
+        });
+      const notify = vi.fn();
 
-      vi.mocked(context.ui.custom).mockResolvedValueOnce({
-        name: "test-skill",
-        description: "Test description",
-      });
+      await handleCreate({ ui: { custom, notify } } as never);
 
-      await handler("create", context);
-
-      expect(context.ui.notify).toHaveBeenCalledWith("Skill created successfully");
+      expect(custom).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith(
+        `Skill created successfully: ${expectedSkillPath}`,
+      );
     });
 
-    it("should notify when skill creation is cancelled", async () => {
-      const context = createContext();
-      vi.mocked(context.ui.custom).mockResolvedValueOnce(null);
+    it("shows the second form and writes optional fields when confirm=true", async () => {
+      const custom = vi
+        .fn()
+        .mockResolvedValueOnce({
+          name: "test-skill",
+          description: "Useful skill description",
+          confirm: true,
+        })
+        .mockResolvedValueOnce({
+          license: "./LICENSE",
+          compatibility: "pi >= 0.67",
+          allowedTools: "read write",
+        });
+      const notify = vi.fn();
 
-      await handler("create", context);
+      await handleCreate({ ui: { custom, notify } } as never);
 
-      expect(context.ui.notify).toHaveBeenCalledWith("Skill creation cancelled", "info");
+      expect(custom).toHaveBeenCalledTimes(2);
+      expect(writeFile).toHaveBeenCalledWith(
+        expectedSkillPath,
+        expect.stringContaining("allowed-tools: read write"),
+        "utf8",
+      );
+      expect(notify).toHaveBeenCalledWith(
+        `Skill created successfully: ${expectedSkillPath}`,
+      );
     });
 
-    it(`should work when ${SubCommands.EDIT} is called`, async () => {
-      const context = createContext();
-      await handler("edit", context);
+    it("cancels creation when the second form is dismissed", async () => {
+      const custom = vi
+        .fn()
+        .mockResolvedValueOnce({
+          name: "test-skill",
+          description: "Useful skill description",
+          confirm: true,
+        })
+        .mockResolvedValueOnce(null);
+      const notify = vi.fn();
 
-      expect(context.ui.notify).toHaveBeenCalledWith("Skill edited successfully");
+      await handleCreate({ ui: { custom, notify } } as never);
+
+      expect(notify).toHaveBeenCalledWith("Skill creation cancelled", "info");
     });
 
-    it(`should work when ${SubCommands.DELETE} is called`, async () => {
-      const context = createContext();
-      await handler("delete", context);
+    it("opens the external editor from $VISUAL or $EDITOR", async () => {
+      vi.mocked(readdir).mockResolvedValueOnce([
+        { isDirectory: () => true, name: "test-skill" },
+      ] as never);
+      vi.stubEnv("VISUAL", "nvim");
+      vi.mocked(spawn).mockReturnValueOnce({
+        on: (event: string, callback: (value?: number) => void) => {
+          if (event === "exit") {
+            callback(0);
+          }
+        },
+      } as never);
+      const custom = vi.fn().mockResolvedValueOnce(
+        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+      );
+      const notify = vi.fn();
 
-      expect(context.ui.notify).toHaveBeenCalledWith("Skill deleted successfully");
+      await handleEdit({ ui: { custom, notify } } as never);
+
+      expect(spawn).toHaveBeenCalledWith("nvim", [
+        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+      ], expect.objectContaining({ shell: true }));
+      expect(notify).toHaveBeenCalledWith(
+        "Skill edited successfully: /test-home/.pi/agents/skills/test-skill/SKILL.md",
+      );
+      vi.unstubAllEnvs();
+    });
+
+    it("deletes the selected skill from ~/.pi/agents/skills", async () => {
+      vi.mocked(readdir).mockResolvedValueOnce([
+        { isDirectory: () => true, name: "test-skill" },
+      ] as never);
+      const custom = vi.fn().mockResolvedValueOnce(
+        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+      );
+      const notify = vi.fn();
+
+      await handleDelete({ ui: { custom, notify } } as never);
+
+      expect(rm).toHaveBeenCalledWith(
+        "/test-home/.pi/agents/skills/test-skill/SKILL.md",
+        { force: true },
+      );
+      expect(notify).toHaveBeenCalledWith(
+        "Skill deleted successfully: /test-home/.pi/agents/skills/test-skill/SKILL.md",
+      );
     });
   });
 });
-
-function assertInitialFormRender(
-  renderFormLines: (form: SkillForm) => string[],
-  form: SkillForm,
-  findLineIndex: (lines: string[], text: string) => number,
-) {
-  const lines = renderFormLines(form);
-  const createSkillIndex = findLineIndex(lines, "Create Skill");
-  expect(createSkillIndex).toBe(1);
-  const nameLabelIndex = findLineIndex(lines, "name");
-  const descriptionLabelIndex = findLineIndex(lines, "description");
-  const inputIndexes = lines
-    .map((line, index) => (line.includes(">") ? index : -1))
-    .filter((index) => index > -1);
-
-  const confirmNextFieldsLabelIndex = findLineIndex(
-    lines,
-    "[ ] Do you want to fill in the next fields?",
-  );
-
-  expect(inputIndexes).toHaveLength(2);
-  const [nameInputIndex, descriptionInputIndex] = inputIndexes;
-  expect(nameInputIndex).toBeGreaterThan(nameLabelIndex);
-  expect(descriptionInputIndex).toBeGreaterThan(descriptionLabelIndex);
-  expect(confirmNextFieldsLabelIndex).toBeGreaterThan(descriptionInputIndex);
-}
