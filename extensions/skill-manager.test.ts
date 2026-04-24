@@ -1,7 +1,18 @@
 import { dirname, join } from "node:path";
 import type { Theme } from "@mariozechner/pi-coding-agent";
-import type { TUI } from "@mariozechner/pi-tui";
+import { Key, type TUI } from "@mariozechner/pi-tui";
 import { Form } from "../shared/components";
+
+vi.mock("@mariozechner/pi-tui", async () => {
+  const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
+    "@mariozechner/pi-tui",
+  );
+
+  return {
+    ...module,
+    matchesKey: (data: string, key: string) => data === key,
+  };
+});
 
 vi.mock("node:os", () => ({
   homedir: () => "/test-home",
@@ -21,7 +32,15 @@ vi.mock("node:child_process", () => ({
 
 import { spawn } from "node:child_process";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { handleCreate, handleDelete, handleEdit } from "./skill-manager";
+import {
+  createOptionalSkillForm,
+  createRequiredSkillForm,
+  handleCreate,
+  handleDelete,
+  handleEdit,
+  parseOptionalSkillFormValues,
+  parseRequiredSkillFormValues,
+} from "./skill-manager";
 
 describe("skill manager handlers", () => {
   const expectedSkillPath = join(
@@ -94,6 +113,137 @@ describe("skill manager handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  describe("createRequiredSkillForm", () => {
+    it("uses the shared form component and required title", () => {
+      const form = createRequiredSkillForm(createTui(), createTheme(), vi.fn());
+      const lines = form.render(80).join("\n");
+
+      expect(form).toBeInstanceOf(Form);
+      expect(lines).toContain("Create Skill");
+      expect(lines).toContain("Do you want to fill in the next fields?");
+    });
+
+    it("renders required form errors when invalid values are submitted", () => {
+      const form = createRequiredSkillForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      form.handleInput("B");
+      form.handleInput("a");
+      form.handleInput("d");
+      form.handleInput(Key.tab);
+      form.handleInput(Key.tab);
+      form.handleInput(Key.enter);
+
+      const lines = form.render(80).join("\n");
+
+      expect(lines).toContain("Must be lowercase alphanumeric with dashes only");
+      expect(lines).toContain("Description is required");
+    });
+
+    it("validates description when name is already filled", () => {
+      const form = createRequiredSkillForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      for (const character of "test-skill") {
+        form.handleInput(character);
+      }
+
+      form.handleInput(Key.tab);
+      form.handleInput(Key.tab);
+      form.handleInput(Key.enter);
+
+      const lines = form.render(80).join("\n");
+
+      expect(lines).not.toContain("Name is required");
+      expect(lines).not.toContain("Must be lowercase alphanumeric with dashes only");
+      expect(lines).toContain("Description is required");
+    });
+  });
+
+  describe("createOptionalSkillForm", () => {
+    it("uses the shared form component and optional title", () => {
+      const form = createOptionalSkillForm(createTui(), createTheme(), vi.fn());
+      const lines = form.render(80).join("\n");
+
+      expect(form).toBeInstanceOf(Form);
+      expect(lines).toContain("Skill Details");
+      expect(lines).toContain("license");
+      expect(lines).toContain("allowedTools");
+    });
+
+    it("renders optional form errors when invalid values are submitted", () => {
+      const form = createOptionalSkillForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      for (const character of 'bad:path') {
+        form.handleInput(character);
+      }
+      form.handleInput(Key.tab);
+      for (const character of "x".repeat(501)) {
+        form.handleInput(character);
+      }
+      form.handleInput(Key.tab);
+      for (const character of "bash read") {
+        form.handleInput(character);
+      }
+      form.handleInput(Key.enter);
+
+      const lines = form.render(80).join("\n");
+
+      expect(lines).toContain("License must be a valid path");
+      expect(lines).toContain("Compatibility must be 500 characters or fewer");
+      expect(lines).toContain("Allowed tools must be a comma-separated list");
+    });
+
+    it("validates later optional fields when earlier fields are empty", () => {
+      const form = createOptionalSkillForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      form.handleInput(Key.tab);
+      form.handleInput(Key.tab);
+      for (const character of "bash read") {
+        form.handleInput(character);
+      }
+      form.handleInput(Key.enter);
+
+      const lines = form.render(80).join("\n");
+
+      expect(lines).not.toContain("License must be a valid path");
+      expect(lines).not.toContain("Compatibility must be 500 characters or fewer");
+      expect(lines).toContain("Allowed tools must be a comma-separated list");
+    });
+  });
+
+  describe("parseRequiredSkillFormValues", () => {
+    it("returns the expected required field errors", () => {
+      expect(
+        parseRequiredSkillFormValues({
+          name: "Bad Name",
+          description: "",
+        }),
+      ).toEqual({
+        name: "Must be lowercase alphanumeric with dashes only",
+        description: "Description is required",
+      });
+    });
+  });
+
+  describe("parseOptionalSkillFormValues", () => {
+    it("returns the expected optional field errors", () => {
+      expect(
+        parseOptionalSkillFormValues({
+          license: "bad:path",
+          compatibility: "x".repeat(501),
+          allowedTools: "bash read",
+        }),
+      ).toEqual({
+        license: "License must be a valid path",
+        compatibility: "Compatibility must be 500 characters or fewer",
+        allowedTools: "Allowed tools must be a comma-separated list",
+      });
+    });
   });
 
   it("handleCreate cancels when the required form is dismissed", async () => {
