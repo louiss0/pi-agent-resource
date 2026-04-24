@@ -1,6 +1,17 @@
 import type { Theme } from "@mariozechner/pi-coding-agent";
-import type { TUI } from "@mariozechner/pi-tui";
+import { Key, type TUI } from "@mariozechner/pi-tui";
 import { Form } from "../shared/components";
+
+vi.mock("@mariozechner/pi-tui", async () => {
+  const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
+    "@mariozechner/pi-tui",
+  );
+
+  return {
+    ...module,
+    matchesKey: (data: string, key: string) => data === key,
+  };
+});
 
 vi.mock("node:fs/promises", () => ({
   readdir: vi.fn(),
@@ -48,6 +59,58 @@ describe("extensions/prompt-manager", () => {
       expect(lines).toContain("Create Prompt");
       expect(lines).toContain("argument-hint is optional");
       expect(lines).toContain("Templat");
+    });
+
+    it("renders the expected errors when invalid values are submitted", () => {
+      const form = createPromptForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      form.handleInput("U");
+      form.handleInput("P");
+      form.handleInput(Key.tab);
+
+      form.handleInput("s");
+      form.handleInput("h");
+      form.handleInput("o");
+      form.handleInput("r");
+      form.handleInput("t");
+      form.handleInput(Key.tab);
+
+      form.handleInput("p");
+      form.handleInput("l");
+      form.handleInput("a");
+      form.handleInput("i");
+      form.handleInput("n");
+      form.handleInput(Key.enter);
+
+      const lines = form.render(100).join("\n");
+
+      expect(lines).toContain("Name must be at least 3 characters");
+      expect(lines).toContain("Name must be lowercase letters, numbers, and dashes only");
+      expect(lines).toContain("Description must be at least 35 characters");
+      expect(lines).toContain("Argument hint must use [] or <> tokens");
+    });
+
+    it("validates later fields when name is filled first", () => {
+      const form = createPromptForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      form.handleInput("b");
+      form.handleInput("u");
+      form.handleInput("i");
+      form.handleInput("l");
+      form.handleInput("d");
+
+      form.handleInput(Key.tab);
+      form.handleInput(Key.tab);
+      form.handleInput(Key.enter);
+
+      const lines = form.render(100).join("\n");
+
+      expect(lines).not.toContain("Name must be at least 3 characters");
+      expect(lines).not.toContain("Name must be lowercase letters, numbers, and dashes only");
+      expect(lines).toContain("Description must be at least 35 characters");
+      expect(lines).not.toContain("Argument hint must use [] or <> tokens");
     });
   });
 
