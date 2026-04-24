@@ -1,6 +1,14 @@
+import { join } from "node:path";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { Key, type TUI } from "@mariozechner/pi-tui";
 import { Form } from "../shared/components";
+import {
+  getResourceFileSystem,
+  resetResourceFileSystem,
+  seedMemoryResourceFileSystem,
+  useMemoryResourceFileSystem,
+} from "../shared/filesystem";
+import { resetDevelopmentExtensionNotice } from "../shared/runtime";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -13,15 +21,10 @@ vi.mock("@mariozechner/pi-tui", async () => {
   };
 });
 
-vi.mock("node:fs/promises", () => ({
-  mkdir: vi.fn(),
-  readdir: vi.fn(),
-  readFile: vi.fn(),
-  rm: vi.fn(),
-  writeFile: vi.fn(),
+vi.mock("node:os", () => ({
+  homedir: () => "/test-home",
 }));
 
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
   createPromptForm,
   handleCreate,
@@ -31,6 +34,8 @@ import {
 } from "./prompt-manager";
 
 describe("extensions/prompt-manager", () => {
+  const expectedPromptPath = join("/test-home", ".pi", "prompts", "create-react-component.md");
+
   function createTheme() {
     return {
       fg: (_color: string, text: string) => text,
@@ -49,6 +54,13 @@ describe("extensions/prompt-manager", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    useMemoryResourceFileSystem();
+    resetDevelopmentExtensionNotice();
+  });
+
+  afterEach(() => {
+    resetResourceFileSystem();
   });
 
   describe("createPromptForm", () => {
@@ -150,6 +162,7 @@ describe("extensions/prompt-manager", () => {
         (...args: never[]) => { render: (width: number) => string[] },
         unknown,
       ];
+      const content = await getResourceFileSystem().readFile(expectedPromptPath, "utf8");
 
       expect(
         formFactory(createTui() as never, createTheme() as never, {} as never, vi.fn() as never),
@@ -164,15 +177,8 @@ describe("extensions/prompt-manager", () => {
         overlay: true,
         overlayOptions: { anchor: "center", width: "80%", maxHeight: "80%" },
       });
-      expect(mkdir).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]\.pi[\\/]prompts$/),
-        { recursive: true },
-      );
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]\.pi[\\/]prompts[\\/]create-react-component\.md$/),
-        expect.stringContaining("argument-hint: <name> [directory]"),
-        "utf8",
-      );
+      expect(content).toContain("argument-hint: <name> [directory]");
+      expect(content).toContain("Write the component template here");
       expect(notify).toHaveBeenCalledWith("Prompt created");
     });
 
@@ -181,7 +187,7 @@ describe("extensions/prompt-manager", () => {
 
       await handleCreate({ ui: { custom: vi.fn().mockResolvedValueOnce(null), notify } } as never);
 
-      expect(writeFile).not.toHaveBeenCalled();
+      await expect(getResourceFileSystem().readFile(expectedPromptPath, "utf8")).rejects.toThrow();
       expect(notify).toHaveBeenCalledWith("Prompt creation cancelled", "info");
     });
 
@@ -190,7 +196,7 @@ describe("extensions/prompt-manager", () => {
       const custom = vi
         .fn()
         .mockResolvedValueOnce({
-          name: "discarded-name",
+          name: "create-react-component",
           description: "This prompt creates a React component with full file output",
           "argument-hint": "<name>",
         })
@@ -198,66 +204,63 @@ describe("extensions/prompt-manager", () => {
 
       await handleCreate({ ui: { custom, notify } } as never);
 
-      expect(writeFile).not.toHaveBeenCalled();
+      await expect(getResourceFileSystem().readFile(expectedPromptPath, "utf8")).rejects.toThrow();
       expect(notify).toHaveBeenCalledWith("Prompt creation cancelled", "info");
     });
   });
 
   describe("handleEdit", () => {
-    it("edits the selected local prompt", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["create-react-component.md"] as never);
-      vi.mocked(readFile).mockResolvedValueOnce("---\nname: create-react-component\n---\n" as never);
-      const select = vi.fn().mockResolvedValueOnce("local: create-react-component");
+    it("edits the selected global prompt", async () => {
+      seedMemoryResourceFileSystem({
+        [expectedPromptPath]: "---\nname: create-react-component\n---\n",
+      });
+      const select = vi.fn().mockResolvedValueOnce("global: create-react-component");
       const editor = vi.fn().mockResolvedValueOnce("updated prompt content");
       const notify = vi.fn();
 
       await handleEdit({ ui: { notify, select, editor } } as never);
 
-      expect(select).toHaveBeenCalledWith("Edit Prompt", ["local: create-react-component"]);
-      expect(readFile).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]?\.pi[\\/]prompts[\\/]create-react-component\.md$/),
-        "utf8",
-      );
+      const content = await getResourceFileSystem().readFile(expectedPromptPath, "utf8");
+
+      expect(select).toHaveBeenCalledWith("Edit Prompt", ["global: create-react-component"]);
       expect(editor).toHaveBeenCalledWith("Edit Prompt", "---\nname: create-react-component\n---\n");
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]?\.pi[\\/]prompts[\\/]create-react-component\.md$/),
-        "updated prompt content",
-        "utf8",
-      );
+      expect(content).toBe("updated prompt content");
       expect(notify).toHaveBeenCalledWith("Prompt edited");
     });
 
     it("reports cancellation when the prompt editor is dismissed", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["create-react-component.md"] as never);
-      vi.mocked(readFile).mockResolvedValueOnce("---\nname: create-react-component\n---\n" as never);
+      seedMemoryResourceFileSystem({
+        [expectedPromptPath]: "---\nname: create-react-component\n---\n",
+      });
       const notify = vi.fn();
 
       await handleEdit({
         ui: {
-          select: vi.fn().mockResolvedValueOnce("local: create-react-component"),
+          select: vi.fn().mockResolvedValueOnce("global: create-react-component"),
           editor: vi.fn().mockResolvedValueOnce(undefined),
           notify,
         },
       } as never);
 
-      expect(writeFile).not.toHaveBeenCalled();
+      const content = await getResourceFileSystem().readFile(expectedPromptPath, "utf8");
+
+      expect(content).toBe("---\nname: create-react-component\n---\n");
       expect(notify).toHaveBeenCalledWith("Prompt editing cancelled", "info");
     });
   });
 
   describe("handleDelete", () => {
     it("deletes the selected prompt", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["create-react-component.md"] as never);
-      const select = vi.fn().mockResolvedValueOnce("local: create-react-component");
+      seedMemoryResourceFileSystem({
+        [expectedPromptPath]: "---\nname: create-react-component\n---\n",
+      });
+      const select = vi.fn().mockResolvedValueOnce("global: create-react-component");
       const notify = vi.fn();
 
       await handleDelete({ ui: { notify, select } } as never);
 
-      expect(select).toHaveBeenCalledWith("Delete Prompt", ["local: create-react-component"]);
-      expect(rm).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]?\.pi[\\/]prompts[\\/]create-react-component\.md$/),
-        { force: true, recursive: true },
-      );
+      await expect(getResourceFileSystem().readFile(expectedPromptPath, "utf8")).rejects.toThrow();
+      expect(select).toHaveBeenCalledWith("Delete Prompt", ["global: create-react-component"]);
       expect(notify).toHaveBeenCalledWith("Prompt deleted");
     });
   });

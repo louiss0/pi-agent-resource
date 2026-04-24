@@ -1,11 +1,12 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
 import { Container, Editor, Key, Spacer, Text, type TUI, matchesKey } from "@mariozechner/pi-tui";
 import { InferOutput, maxLength, minLength, object, optional, pipe, regex, string } from "valibot";
 import { Form, LabelledInput } from "../shared/components";
+import { getResourceFileSystem } from "../shared/filesystem";
 import { parseObjectErrors } from "../shared/parse";
+import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -111,6 +112,7 @@ export default (pi: ExtensionAPI) => {
     getArgumentCompletions:
       getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("prompt"),
     handler: async (arg, ctx) => {
+      notifyWhenUsingDevelopmentExtension(ctx);
       const result = SubCommands.parse(arg);
       if (!result.success) {
         ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");
@@ -160,9 +162,14 @@ export async function handleCreate(ctx: ExtensionContext) {
     return;
   }
 
+  const fileSystem = getResourceFileSystem();
   const filePath = join(globalPromptDirectory, `${values.name}.md`);
-  await mkdir(globalPromptDirectory, { recursive: true });
-  await writeFile(filePath, `${renderFrontmatter(values)}\n${template}`.trimEnd() + "\n", "utf8");
+  await fileSystem.mkdir(globalPromptDirectory, { recursive: true });
+  await fileSystem.writeFile(
+    filePath,
+    `${renderFrontmatter(values)}\n${template}`.trimEnd() + "\n",
+    "utf8",
+  );
   ctx.ui.notify("Prompt created");
 }
 
@@ -174,7 +181,8 @@ export async function handleEdit(ctx: ExtensionContext) {
     return;
   }
 
-  const content = await readFile(prompt.path, "utf8");
+  const fileSystem = getResourceFileSystem();
+  const content = await fileSystem.readFile(prompt.path, "utf8");
   const editedContent = await ctx.ui.editor("Edit Prompt", content);
 
   if (editedContent === undefined) {
@@ -182,7 +190,7 @@ export async function handleEdit(ctx: ExtensionContext) {
     return;
   }
 
-  await writeFile(prompt.path, editedContent, "utf8");
+  await fileSystem.writeFile(prompt.path, editedContent, "utf8");
   ctx.ui.notify("Prompt edited");
 }
 
@@ -194,7 +202,7 @@ export async function handleDelete(ctx: ExtensionContext) {
     return;
   }
 
-  await rm(prompt.path, { force: true, recursive: true });
+  await getResourceFileSystem().removeFile(prompt.path);
   ctx.ui.notify("Prompt deleted");
 }
 
@@ -232,7 +240,7 @@ async function listPromptChoices() {
 
   for (const directory of directories) {
     try {
-      const names = await readdir(directory.path);
+      const names = await getResourceFileSystem().readDirectoryNames(directory.path);
       choices.push(
         ...names.map((name) => ({
           path: join(directory.path, name),

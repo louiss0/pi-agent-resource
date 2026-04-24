@@ -18,7 +18,6 @@ import {
   type TUI,
 } from "@mariozechner/pi-tui";
 import { spawn } from "node:child_process";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -32,7 +31,9 @@ import {
   string,
 } from "valibot";
 import { ConfirmationBox, Form, LabelledInput } from "../shared/components";
+import { getResourceFileSystem } from "../shared/filesystem";
 import { parseObjectErrors } from "../shared/parse";
+import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -309,7 +310,7 @@ export async function handleEdit(
       return;
     }
 
-    await writeFile(skillPath, editedContent, "utf8");
+    await getResourceFileSystem().writeFile(skillPath, editedContent, "utf8");
   }
 
   ctx.ui.notify("Skill updated. Reloading skills...", "info");
@@ -325,7 +326,7 @@ export async function handleDelete(ctx: ExtensionCommandContext) {
   }
 
   const skillDirectory = dirname(skillPath);
-  await rm(skillDirectory, { force: true, recursive: true });
+  await getResourceFileSystem().removeDirectory(skillDirectory);
   ctx.ui.notify(`Skill deleted successfully: ${skillDirectory}`);
 }
 
@@ -340,7 +341,10 @@ async function resolveSkillEditMode(requestedEditMode?: SkillEditorMode, cwd = p
 
 async function readProjectEditorConfig(cwd = process.cwd()) {
   try {
-    const config = await readFile(join(cwd, PROJECT_EDITOR_CONFIG_FILE), "utf8");
+    const config = await getResourceFileSystem().readFile(
+      join(cwd, PROJECT_EDITOR_CONFIG_FILE),
+      "utf8",
+    );
     let isInSkillSection = false;
 
     for (const line of config.split(/\r?\n/)) {
@@ -370,8 +374,9 @@ async function readProjectEditorConfig(cwd = process.cwd()) {
 async function createSkillFile(fields: SkillFrontmatterFields) {
   const skillDirectory = join(SKILLS_DIRECTORY, fields.name);
   const skillPath = join(skillDirectory, "SKILL.md");
-  await mkdir(skillDirectory, { recursive: true });
-  await writeFile(skillPath, renderSkillMarkdown(fields), {
+  const fileSystem = getResourceFileSystem();
+  await fileSystem.mkdir(skillDirectory, { recursive: true });
+  await fileSystem.writeFile(skillPath, renderSkillMarkdown(fields), {
     encoding: "utf8",
     flag: "wx",
   });
@@ -491,7 +496,7 @@ async function pickSkillPath(ctx: ExtensionContext, title: string) {
 
 async function listSkillNames() {
   try {
-    const entries = await readdir(SKILLS_DIRECTORY, { withFileTypes: true });
+    const entries = await getResourceFileSystem().readDirectoryEntries(SKILLS_DIRECTORY);
     return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
   } catch {
     return [];
@@ -596,7 +601,7 @@ function tokenizeCommandLine(commandLine: string) {
 }
 
 async function readSkillFile(filePath: string) {
-  return readFile(filePath, "utf8");
+  return getResourceFileSystem().readFile(filePath, "utf8");
 }
 
 export default (pi: ExtensionAPI) => {
@@ -605,6 +610,7 @@ export default (pi: ExtensionAPI) => {
     getArgumentCompletions:
       getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("skill"),
     handler: async (arg, ctx) => {
+      notifyWhenUsingDevelopmentExtension(ctx);
       const result = parseSkillCommandArgument(arg);
 
       if (!result.success) {

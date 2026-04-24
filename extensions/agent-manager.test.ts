@@ -1,6 +1,14 @@
+import { join } from "node:path";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { Key, type TUI } from "@mariozechner/pi-tui";
 import { Form } from "../shared/components";
+import {
+  getResourceFileSystem,
+  resetResourceFileSystem,
+  seedMemoryResourceFileSystem,
+  useMemoryResourceFileSystem,
+} from "../shared/filesystem";
+import { resetDevelopmentExtensionNotice } from "../shared/runtime";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -13,15 +21,10 @@ vi.mock("@mariozechner/pi-tui", async () => {
   };
 });
 
-vi.mock("node:fs/promises", () => ({
-  mkdir: vi.fn(),
-  readdir: vi.fn(),
-  readFile: vi.fn(),
-  rm: vi.fn(),
-  writeFile: vi.fn(),
+vi.mock("node:os", () => ({
+  homedir: () => "/test-home",
 }));
 
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
   createAgentForm,
   handleCreate,
@@ -31,6 +34,8 @@ import {
 } from "./agent-manager";
 
 describe("extensions/agent-manager", () => {
+  const expectedAgentPath = join("/test-home", ".pi", "agents", "oracle.md");
+
   function createTheme() {
     return {
       fg: (_color: string, text: string) => text,
@@ -49,6 +54,13 @@ describe("extensions/agent-manager", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    useMemoryResourceFileSystem();
+    resetDevelopmentExtensionNotice();
+  });
+
+  afterEach(() => {
+    resetResourceFileSystem();
   });
 
   describe("createAgentForm", () => {
@@ -162,18 +174,11 @@ describe("extensions/agent-manager", () => {
         {} as never,
         vi.fn() as never,
       );
+      const content = await getResourceFileSystem().readFile(expectedAgentPath, "utf8");
 
       expect(component).toBeInstanceOf(Form);
       expect(options).toEqual({ overlay: true, overlayOptions: { offsetY: -500 } });
-      expect(mkdir).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]\.pi[\\/]agents$/),
-        { recursive: true },
-      );
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]\.pi[\\/]agents[\\/]oracle\.md$/),
-        expect.stringContaining("name: oracle"),
-        "utf8",
-      );
+      expect(content).toContain("name: oracle");
       expect(notify).toHaveBeenCalledWith("Agent created");
     });
 
@@ -182,35 +187,34 @@ describe("extensions/agent-manager", () => {
 
       await handleCreate({ ui: { custom: vi.fn().mockResolvedValueOnce(null), notify } } as never);
 
-      expect(writeFile).not.toHaveBeenCalled();
+      await expect(getResourceFileSystem().readFile(expectedAgentPath, "utf8")).rejects.toThrow();
       expect(notify).toHaveBeenCalledWith("Agent creation cancelled", "info");
     });
   });
 
   describe("handleEdit", () => {
-    it("edits the selected local agent", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["oracle.md"] as never);
-      vi.mocked(readFile).mockResolvedValueOnce("---\nname: oracle\n---\n" as never);
-      const select = vi.fn().mockResolvedValueOnce("local: oracle");
+    it("edits the selected global agent", async () => {
+      seedMemoryResourceFileSystem({
+        [expectedAgentPath]: "---\nname: oracle\n---\n",
+      });
+      const select = vi.fn().mockResolvedValueOnce("global: oracle");
       const editor = vi.fn().mockResolvedValueOnce("updated agent content");
       const notify = vi.fn();
 
       await handleEdit({ ui: { notify, select, editor } } as never);
 
-      expect(readdir).toHaveBeenCalledTimes(2);
-      expect(select).toHaveBeenCalledWith("Edit Agent", ["local: oracle"]);
-      expect(readFile).toHaveBeenCalledWith(expect.stringMatching(/[\\/]?\.pi[\\/]agents[\\/]oracle\.md$/), "utf8");
+      const content = await getResourceFileSystem().readFile(expectedAgentPath, "utf8");
+
+      expect(select).toHaveBeenCalledWith("Edit Agent", ["global: oracle"]);
       expect(editor).toHaveBeenCalledWith("Edit Agent", "---\nname: oracle\n---\n");
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]?\.pi[\\/]agents[\\/]oracle\.md$/),
-        "updated agent content",
-        "utf8",
-      );
+      expect(content).toBe("updated agent content");
       expect(notify).toHaveBeenCalledWith("Agent edited");
     });
 
     it("reports cancellation when no agent is selected for edit", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["oracle.md"] as never);
+      seedMemoryResourceFileSystem({
+        [expectedAgentPath]: "---\nname: oracle\n---\n",
+      });
       const notify = vi.fn();
 
       await handleEdit({ ui: { select: vi.fn().mockResolvedValueOnce(undefined), notify } } as never);
@@ -219,46 +223,49 @@ describe("extensions/agent-manager", () => {
     });
 
     it("reports cancellation when the agent editor is dismissed", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["oracle.md"] as never);
-      vi.mocked(readFile).mockResolvedValueOnce("---\nname: oracle\n---\n" as never);
+      seedMemoryResourceFileSystem({
+        [expectedAgentPath]: "---\nname: oracle\n---\n",
+      });
       const notify = vi.fn();
 
       await handleEdit({
         ui: {
-          select: vi.fn().mockResolvedValueOnce("local: oracle"),
+          select: vi.fn().mockResolvedValueOnce("global: oracle"),
           editor: vi.fn().mockResolvedValueOnce(undefined),
           notify,
         },
       } as never);
 
-      expect(writeFile).not.toHaveBeenCalled();
+      const content = await getResourceFileSystem().readFile(expectedAgentPath, "utf8");
+
+      expect(content).toBe("---\nname: oracle\n---\n");
       expect(notify).toHaveBeenCalledWith("Agent editing cancelled", "info");
     });
   });
 
   describe("handleDelete", () => {
     it("deletes the selected agent", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["oracle.md"] as never);
-      const select = vi.fn().mockResolvedValueOnce("local: oracle");
+      seedMemoryResourceFileSystem({
+        [expectedAgentPath]: "---\nname: oracle\n---\n",
+      });
+      const select = vi.fn().mockResolvedValueOnce("global: oracle");
       const notify = vi.fn();
 
       await handleDelete({ ui: { notify, select } } as never);
 
-      expect(select).toHaveBeenCalledWith("Delete Agent", ["local: oracle"]);
-      expect(rm).toHaveBeenCalledWith(
-        expect.stringMatching(/[\\/]?\.pi[\\/]agents[\\/]oracle\.md$/),
-        { force: true },
-      );
+      await expect(getResourceFileSystem().readFile(expectedAgentPath, "utf8")).rejects.toThrow();
+      expect(select).toHaveBeenCalledWith("Delete Agent", ["global: oracle"]);
       expect(notify).toHaveBeenCalledWith("Agent deleted");
     });
 
     it("reports cancellation when no agent is selected for deletion", async () => {
-      vi.mocked(readdir).mockResolvedValueOnce(["oracle.md"] as never);
+      seedMemoryResourceFileSystem({
+        [expectedAgentPath]: "---\nname: oracle\n---\n",
+      });
       const notify = vi.fn();
 
       await handleDelete({ ui: { select: vi.fn().mockResolvedValueOnce(undefined), notify } } as never);
 
-      expect(rm).not.toHaveBeenCalled();
       expect(notify).toHaveBeenCalledWith("Agent deleting cancelled", "info");
     });
   });

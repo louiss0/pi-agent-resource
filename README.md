@@ -38,6 +38,16 @@ When creating a prompt, the wizard asks whether the prompt should be:
 
 Grouped prompts follow the `_index.md` + `type: group` layout used by grouped PI prompt sets.
 
+## Development mode
+
+The repository uses a local `.env` file for development mode.
+
+```env
+PI_RESOURCE_DEV=1
+```
+
+When that variable is set, the extension shows its development notice and uses the in-memory filesystem.
+
 ## Tests
 
 ```bash

@@ -2,6 +2,13 @@ import { dirname, join } from "node:path";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { Key, type TUI } from "@mariozechner/pi-tui";
 import { Form } from "../shared/components";
+import {
+  getResourceFileSystem,
+  resetResourceFileSystem,
+  seedMemoryResourceFileSystem,
+  useMemoryResourceFileSystem,
+} from "../shared/filesystem";
+import { resetDevelopmentExtensionNotice } from "../shared/runtime";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -18,20 +25,11 @@ vi.mock("node:os", () => ({
   homedir: () => "/test-home",
 }));
 
-vi.mock("node:fs/promises", () => ({
-  mkdir: vi.fn(),
-  readdir: vi.fn(),
-  readFile: vi.fn(),
-  rm: vi.fn(),
-  writeFile: vi.fn(),
-}));
-
 vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
 }));
 
 import { spawn } from "node:child_process";
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
   createOptionalSkillForm,
   createRequiredSkillForm,
@@ -113,6 +111,12 @@ describe("skill manager handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    useMemoryResourceFileSystem();
+    resetDevelopmentExtensionNotice();
+  });
+
+  afterEach(() => {
+    resetResourceFileSystem();
   });
 
   describe("createRequiredSkillForm", () => {
@@ -268,14 +272,8 @@ describe("skill manager handlers", () => {
     await handleCreate({ ui: { custom, notify } } as never);
 
     expectFormFactory(custom, 0, "Create Skill");
-    expect(writeFile).toHaveBeenCalledWith(
-      expectedSkillPath,
-      expect.stringContaining("# Test Skill"),
-      expect.objectContaining({
-        encoding: "utf8",
-        flag: "wx",
-      }),
-    );
+    const content = await getResourceFileSystem().readFile(expectedSkillPath, "utf8");
+    expect(content).toContain("# Test Skill");
     expect(notify).toHaveBeenCalledWith(`Skill created successfully: ${expectedSkillPath}`);
   });
 
@@ -298,14 +296,8 @@ describe("skill manager handlers", () => {
 
     expectFormFactory(custom, 0, "Create Skill");
     expectFormFactory(custom, 1, "Skill Details");
-    expect(writeFile).toHaveBeenCalledWith(
-      expectedSkillPath,
-      expect.stringContaining("allowed-tools: 'read, write'"),
-      expect.objectContaining({
-        encoding: "utf8",
-        flag: "wx",
-      }),
-    );
+    const content = await getResourceFileSystem().readFile(expectedSkillPath, "utf8");
+    expect(content).toContain("allowed-tools: 'read, write'");
     expect(notify).toHaveBeenCalledWith(`Skill created successfully: ${expectedSkillPath}`);
   });
 
@@ -322,21 +314,15 @@ describe("skill manager handlers", () => {
 
     await handleCreate({ ui: { custom, notify } } as never);
 
-    expect(writeFile).toHaveBeenCalledWith(
-      expectedSkillPath,
-      expect.stringContaining("# Test Skill"),
-      expect.objectContaining({
-        encoding: "utf8",
-        flag: "wx",
-      }),
-    );
+    const content = await getResourceFileSystem().readFile(expectedSkillPath, "utf8");
+    expect(content).toContain("# Test Skill");
     expect(notify).toHaveBeenCalledWith(`Skill created successfully: ${expectedSkillPath}`);
   });
 
   it("handleCreate reports an existing skill without overwriting it", async () => {
-    vi.mocked(writeFile).mockRejectedValueOnce(
-      Object.assign(new Error("exists"), { code: "EEXIST" }),
-    );
+    seedMemoryResourceFileSystem({
+      [expectedSkillPath]: "existing skill content",
+    });
     const notify = vi.fn();
 
     await handleCreate({
@@ -354,14 +340,9 @@ describe("skill manager handlers", () => {
   });
 
   it("handleEdit uses an 80% overlay editor by default", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([
-      { isDirectory: () => true, name: "test-skill" },
-    ] as never);
-    vi.mocked(readFile)
-      .mockResolvedValueOnce("existing skill content")
-      .mockRejectedValueOnce(new Error("missing config"));
-    vi.stubEnv("VISUAL", "code --wait");
-    vi.stubEnv("EDITOR", "nvim");
+    seedMemoryResourceFileSystem({
+      [expectedSkillPath]: "existing skill content",
+    });
     const custom = vi.fn().mockResolvedValueOnce(expectedSkillPath);
     custom.mockResolvedValueOnce("updated skill content");
     const notify = vi.fn();
@@ -371,16 +352,17 @@ describe("skill manager handlers", () => {
 
     expectEditorOverlayFactory(custom, 1);
     expect(spawn).not.toHaveBeenCalled();
-    expect(writeFile).toHaveBeenCalledWith(expectedSkillPath, "updated skill content", "utf8");
+    expect(await getResourceFileSystem().readFile(expectedSkillPath, "utf8")).toBe(
+      "updated skill content",
+    );
     expect(reload).toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith("Skill updated. Reloading skills...", "info");
   });
 
   it("handleEdit uses the external editor without shell mode", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([
-      { isDirectory: () => true, name: "test-skill" },
-    ] as never);
-    vi.mocked(readFile).mockResolvedValueOnce("existing skill content");
+    seedMemoryResourceFileSystem({
+      [expectedSkillPath]: "existing skill content",
+    });
     vi.stubEnv("VISUAL", 'code --wait +"set ft=markdown"');
     vi.mocked(spawn).mockReturnValueOnce({
       on: (event: string, callback: (value?: number) => void) => {
@@ -405,9 +387,9 @@ describe("skill manager handlers", () => {
   });
 
   it("handleEdit reports cancellation when no skill is selected", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([
-      { isDirectory: () => true, name: "test-skill" },
-    ] as never);
+    seedMemoryResourceFileSystem({
+      [expectedSkillPath]: "existing skill content",
+    });
     const notify = vi.fn();
 
     await handleEdit({
@@ -419,19 +401,18 @@ describe("skill manager handlers", () => {
     } as never);
 
     expect(notify).toHaveBeenCalledWith("Skill edit cancelled", "info");
-    expect(writeFile).not.toHaveBeenCalled();
   });
 
   it("handleDelete removes the selected skill directory", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([
-      { isDirectory: () => true, name: "test-skill" },
-    ] as never);
+    seedMemoryResourceFileSystem({
+      [expectedSkillPath]: "existing skill content",
+    });
     const custom = vi.fn().mockResolvedValueOnce(expectedSkillPath);
     const notify = vi.fn();
 
     await handleDelete({ ui: { custom, notify } } as never);
 
-    expect(rm).toHaveBeenCalledWith(expectedSkillDirectory, { force: true, recursive: true });
+    await expect(getResourceFileSystem().readFile(expectedSkillPath, "utf8")).rejects.toThrow();
     expect(notify).toHaveBeenCalledWith(
       `Skill deleted successfully: ${expectedSkillDirectory}`,
     );
