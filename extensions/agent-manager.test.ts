@@ -1,6 +1,17 @@
 import type { Theme } from "@mariozechner/pi-coding-agent";
-import type { TUI } from "@mariozechner/pi-tui";
+import { Key, type TUI } from "@mariozechner/pi-tui";
 import { Form } from "../shared/components";
+
+vi.mock("@mariozechner/pi-tui", async () => {
+  const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
+    "@mariozechner/pi-tui",
+  );
+
+  return {
+    ...module,
+    matchesKey: (data: string, key: string) => data === key,
+  };
+});
 
 vi.mock("node:fs/promises", () => ({
   readdir: vi.fn(),
@@ -48,6 +59,68 @@ describe("extensions/agent-manager", () => {
       expect(lines).toContain("Create Agent");
       expect(lines).toContain("* required");
       expect(lines).toContain("Use lowercase values. Tools use com");
+    });
+
+    it("renders the expected errors when invalid values are submitted", () => {
+      const form = createAgentForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      form.handleInput("O");
+      form.handleInput("r");
+      form.handleInput("a");
+      form.handleInput("c");
+      form.handleInput("l");
+      form.handleInput("e");
+      form.handleInput(Key.tab);
+
+      form.handleInput("s");
+      form.handleInput("h");
+      form.handleInput("o");
+      form.handleInput("r");
+      form.handleInput("t");
+      form.handleInput(Key.tab);
+
+      form.handleInput("R");
+      form.handleInput("e");
+      form.handleInput("a");
+      form.handleInput("d");
+      form.handleInput(Key.tab);
+
+      form.handleInput("C");
+      form.handleInput(Key.enter);
+
+      const lines = form.render(100).join("\n");
+
+      expect(lines).toContain("Name must be lowercase letters, numbers, and dashes only");
+      expect(lines).toContain("Description must be at least 35 characters");
+      expect(lines).toContain("Tools must be a lowercase comma-separated list");
+      expect(lines).toContain("Model must be at least 2 characters");
+      expect(lines).toContain("Model must be lowercase");
+    });
+
+    it("validates later required fields when name is filled first", () => {
+      const form = createAgentForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+      form.handleInput("o");
+      form.handleInput("r");
+      form.handleInput("a");
+      form.handleInput("c");
+      form.handleInput("l");
+      form.handleInput("e");
+
+      form.handleInput(Key.tab);
+      form.handleInput(Key.tab);
+      form.handleInput(Key.tab);
+      form.handleInput(Key.enter);
+
+      const lines = form.render(100).join("\n");
+
+      expect(lines).not.toContain("Name is required");
+      expect(lines).not.toContain("Name must be lowercase letters, numbers, and dashes only");
+      expect(lines).toContain("Description must be at least 35 characters");
+      expect(lines).toContain("Tools are required");
+      expect(lines).toContain("Model must be at least 2 characters");
     });
   });
 
