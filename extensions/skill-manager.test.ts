@@ -62,9 +62,9 @@ describe("skill manager handlers", () => {
     const component = factory(createTui(), createTheme(), {}, vi.fn());
 
     expect(component).toBeInstanceOf(Form);
-    expect((component as Form<Record<string, string | boolean>>).render(80).join("\n")).toContain(
-      title,
-    );
+    expect(
+      (component as Form<Record<string, string | boolean>>).render(80).join("\n"),
+    ).toContain(title);
     expect(options).toEqual({
       overlay: true,
       overlayOptions: { offsetY: -500 },
@@ -78,9 +78,9 @@ describe("skill manager handlers", () => {
     ];
     const component = factory(createTui(), createTheme(), {}, vi.fn());
 
-    expect((component as { render: (width: number) => string[] }).render(80).join("\n")).toContain(
-      "Edit Skill Markdown",
-    );
+    expect(
+      (component as { render: (width: number) => string[] }).render(80).join("\n"),
+    ).toContain("Edit Skill Markdown");
     expect(options).toEqual({
       overlay: true,
       overlayOptions: {
@@ -184,7 +184,9 @@ describe("skill manager handlers", () => {
   });
 
   it("handleCreate reports an existing skill without overwriting it", async () => {
-    vi.mocked(writeFile).mockRejectedValueOnce(Object.assign(new Error("exists"), { code: "EEXIST" }));
+    vi.mocked(writeFile).mockRejectedValueOnce(
+      Object.assign(new Error("exists"), { code: "EEXIST" }),
+    );
     const notify = vi.fn();
 
     await handleCreate({
@@ -202,7 +204,9 @@ describe("skill manager handlers", () => {
   });
 
   it("handleEdit uses an 80% overlay editor by default", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([{ isDirectory: () => true, name: "test-skill" }] as never);
+    vi.mocked(readdir).mockResolvedValueOnce([
+      { isDirectory: () => true, name: "test-skill" },
+    ] as never);
     vi.mocked(readFile)
       .mockResolvedValueOnce("existing skill content")
       .mockRejectedValueOnce(new Error("missing config"));
@@ -223,7 +227,9 @@ describe("skill manager handlers", () => {
   });
 
   it("handleEdit uses the external editor without shell mode", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([{ isDirectory: () => true, name: "test-skill" }] as never);
+    vi.mocked(readdir).mockResolvedValueOnce([
+      { isDirectory: () => true, name: "test-skill" },
+    ] as never);
     vi.mocked(readFile).mockResolvedValueOnce("existing skill content");
     vi.stubEnv("VISUAL", 'code --wait +"set ft=markdown"');
     vi.mocked(spawn).mockReturnValueOnce({
@@ -249,7 +255,9 @@ describe("skill manager handlers", () => {
   });
 
   it("handleEdit reports cancellation when no skill is selected", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([{ isDirectory: () => true, name: "test-skill" }] as never);
+    vi.mocked(readdir).mockResolvedValueOnce([
+      { isDirectory: () => true, name: "test-skill" },
+    ] as never);
     const notify = vi.fn();
 
     await handleEdit({
@@ -265,13 +273,17 @@ describe("skill manager handlers", () => {
   });
 
   it("handleDelete removes the selected skill directory", async () => {
-    vi.mocked(readdir).mockResolvedValueOnce([{ isDirectory: () => true, name: "test-skill" }] as never);
+    vi.mocked(readdir).mockResolvedValueOnce([
+      { isDirectory: () => true, name: "test-skill" },
+    ] as never);
     const custom = vi.fn().mockResolvedValueOnce(expectedSkillPath);
     const notify = vi.fn();
 
     await handleDelete({ ui: { custom, notify } } as never);
 
     expect(rm).toHaveBeenCalledWith(expectedSkillDirectory, { force: true, recursive: true });
-    expect(notify).toHaveBeenCalledWith(`Skill deleted successfully: ${expectedSkillDirectory}`);
+    expect(notify).toHaveBeenCalledWith(
+      `Skill deleted successfully: ${expectedSkillDirectory}`,
+    );
   });
 });
