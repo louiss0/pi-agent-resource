@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
@@ -78,6 +78,8 @@ class PromptTemplateOverlay extends Container {
         noMatch: (text) => theme.fg("warning", text),
       },
     });
+
+    this.#editor.onSubmit = (value) => done(value);
 
     this.addChild(new Text(theme.fg("accent", "Edit Prompt Template")));
     this.addChild(new Spacer(1));
@@ -159,6 +161,7 @@ export async function handleCreate(ctx: ExtensionContext) {
   }
 
   const filePath = join(globalPromptDirectory, `${values.name}.md`);
+  await mkdir(globalPromptDirectory, { recursive: true });
   await writeFile(filePath, `${renderFrontmatter(values)}\n${template}`.trimEnd() + "\n", "utf8");
   ctx.ui.notify("Prompt created");
 }
@@ -172,7 +175,14 @@ export async function handleEdit(ctx: ExtensionContext) {
   }
 
   const content = await readFile(prompt.path, "utf8");
-  await writeFile(prompt.path, content, "utf8");
+  const editedContent = await ctx.ui.editor("Edit Prompt", content);
+
+  if (editedContent === undefined) {
+    ctx.ui.notify("Prompt editing cancelled", "info");
+    return;
+  }
+
+  await writeFile(prompt.path, editedContent, "utf8");
   ctx.ui.notify("Prompt edited");
 }
 
