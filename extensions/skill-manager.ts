@@ -139,7 +139,15 @@ class SkillEditorOverlay extends Container implements Focusable {
   }
 }
 
-function createRequiredSkillForm(
+export function parseRequiredSkillFormValues(values: RequiredAgentSkillFields) {
+  return parseObjectErrors(RequiredAgentSkillFieldsSchema, values);
+}
+
+export function parseOptionalSkillFormValues(values: OptionalAgentSkillFormFields) {
+  return parseObjectErrors(OptionalAgentSkillFormFieldsSchema, values);
+}
+
+export function createRequiredSkillForm(
   tui: TUI,
   theme: Theme,
   done: (value: (RequiredAgentSkillFields & { confirm: boolean }) | null) => void,
@@ -152,7 +160,7 @@ function createRequiredSkillForm(
       new ConfirmationBox(theme, "Do you want to fill in the next fields?"),
     ],
     parse: (values) =>
-      parseObjectErrors(RequiredAgentSkillFieldsSchema, {
+      parseRequiredSkillFormValues({
         name: values.name,
         description: values.description,
       }),
@@ -161,7 +169,7 @@ function createRequiredSkillForm(
   });
 }
 
-function createOptionalSkillForm(
+export function createOptionalSkillForm(
   tui: TUI,
   theme: Theme,
   done: (value: OptionalAgentSkillFormFields | null) => void,
@@ -173,7 +181,7 @@ function createOptionalSkillForm(
       new LabelledInput("compatibility", theme),
       new LabelledInput("allowedTools", theme),
     ],
-    parse: (values) => parseObjectErrors(OptionalAgentSkillFormFieldsSchema, values),
+    parse: (values) => parseOptionalSkillFormValues(values),
     footer: "Enter next/submit | Tab switch field | Esc cancel",
     spacing: 1,
   });
