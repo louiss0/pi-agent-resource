@@ -14,13 +14,14 @@ vi.mock("@mariozechner/pi-tui", async () => {
 });
 
 vi.mock("node:fs/promises", () => ({
+  mkdir: vi.fn(),
   readdir: vi.fn(),
   readFile: vi.fn(),
   rm: vi.fn(),
   writeFile: vi.fn(),
 }));
 
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
   createPromptForm,
   handleCreate,
@@ -163,6 +164,10 @@ describe("extensions/prompt-manager", () => {
         overlay: true,
         overlayOptions: { anchor: "center", width: "80%", maxHeight: "80%" },
       });
+      expect(mkdir).toHaveBeenCalledWith(
+        expect.stringMatching(/[\\/]\.pi[\\/]prompts$/),
+        { recursive: true },
+      );
       expect(writeFile).toHaveBeenCalledWith(
         expect.stringMatching(/[\\/]\.pi[\\/]prompts[\\/]create-react-component\.md$/),
         expect.stringContaining("argument-hint: <name> [directory]"),
@@ -203,21 +208,40 @@ describe("extensions/prompt-manager", () => {
       vi.mocked(readdir).mockResolvedValueOnce(["create-react-component.md"] as never);
       vi.mocked(readFile).mockResolvedValueOnce("---\nname: create-react-component\n---\n" as never);
       const select = vi.fn().mockResolvedValueOnce("local: create-react-component");
+      const editor = vi.fn().mockResolvedValueOnce("updated prompt content");
       const notify = vi.fn();
 
-      await handleEdit({ ui: { notify, select } } as never);
+      await handleEdit({ ui: { notify, select, editor } } as never);
 
       expect(select).toHaveBeenCalledWith("Edit Prompt", ["local: create-react-component"]);
       expect(readFile).toHaveBeenCalledWith(
         expect.stringMatching(/[\\/]?\.pi[\\/]prompts[\\/]create-react-component\.md$/),
         "utf8",
       );
+      expect(editor).toHaveBeenCalledWith("Edit Prompt", "---\nname: create-react-component\n---\n");
       expect(writeFile).toHaveBeenCalledWith(
         expect.stringMatching(/[\\/]?\.pi[\\/]prompts[\\/]create-react-component\.md$/),
-        "---\nname: create-react-component\n---\n",
+        "updated prompt content",
         "utf8",
       );
       expect(notify).toHaveBeenCalledWith("Prompt edited");
+    });
+
+    it("reports cancellation when the prompt editor is dismissed", async () => {
+      vi.mocked(readdir).mockResolvedValueOnce(["create-react-component.md"] as never);
+      vi.mocked(readFile).mockResolvedValueOnce("---\nname: create-react-component\n---\n" as never);
+      const notify = vi.fn();
+
+      await handleEdit({
+        ui: {
+          select: vi.fn().mockResolvedValueOnce("local: create-react-component"),
+          editor: vi.fn().mockResolvedValueOnce(undefined),
+          notify,
+        },
+      } as never);
+
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith("Prompt editing cancelled", "info");
     });
   });
 

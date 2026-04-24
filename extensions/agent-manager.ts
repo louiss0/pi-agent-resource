@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
@@ -116,6 +116,7 @@ export async function handleCreate(ctx: ExtensionContext) {
   }
 
   const filePath = join(globalAgentDirectory, `${values.name}.md`);
+  await mkdir(globalAgentDirectory, { recursive: true });
   await writeFile(filePath, renderFrontmatter(values), "utf8");
   ctx.ui.notify("Agent created");
 }
@@ -129,7 +130,14 @@ export async function handleEdit(ctx: ExtensionContext) {
   }
 
   const content = await readFile(agent.path, "utf8");
-  await writeFile(agent.path, content, "utf8");
+  const editedContent = await ctx.ui.editor("Edit Agent", content);
+
+  if (editedContent === undefined) {
+    ctx.ui.notify("Agent editing cancelled", "info");
+    return;
+  }
+
+  await writeFile(agent.path, editedContent, "utf8");
   ctx.ui.notify("Agent edited");
 }
 

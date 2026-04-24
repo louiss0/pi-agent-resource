@@ -14,13 +14,14 @@ vi.mock("@mariozechner/pi-tui", async () => {
 });
 
 vi.mock("node:fs/promises", () => ({
+  mkdir: vi.fn(),
   readdir: vi.fn(),
   readFile: vi.fn(),
   rm: vi.fn(),
   writeFile: vi.fn(),
 }));
 
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
   createAgentForm,
   handleCreate,
@@ -164,6 +165,10 @@ describe("extensions/agent-manager", () => {
 
       expect(component).toBeInstanceOf(Form);
       expect(options).toEqual({ overlay: true, overlayOptions: { offsetY: -500 } });
+      expect(mkdir).toHaveBeenCalledWith(
+        expect.stringMatching(/[\\/]\.pi[\\/]agents$/),
+        { recursive: true },
+      );
       expect(writeFile).toHaveBeenCalledWith(
         expect.stringMatching(/[\\/]\.pi[\\/]agents[\\/]oracle\.md$/),
         expect.stringContaining("name: oracle"),
@@ -187,16 +192,18 @@ describe("extensions/agent-manager", () => {
       vi.mocked(readdir).mockResolvedValueOnce(["oracle.md"] as never);
       vi.mocked(readFile).mockResolvedValueOnce("---\nname: oracle\n---\n" as never);
       const select = vi.fn().mockResolvedValueOnce("local: oracle");
+      const editor = vi.fn().mockResolvedValueOnce("updated agent content");
       const notify = vi.fn();
 
-      await handleEdit({ ui: { notify, select } } as never);
+      await handleEdit({ ui: { notify, select, editor } } as never);
 
       expect(readdir).toHaveBeenCalledTimes(2);
       expect(select).toHaveBeenCalledWith("Edit Agent", ["local: oracle"]);
       expect(readFile).toHaveBeenCalledWith(expect.stringMatching(/[\\/]?\.pi[\\/]agents[\\/]oracle\.md$/), "utf8");
+      expect(editor).toHaveBeenCalledWith("Edit Agent", "---\nname: oracle\n---\n");
       expect(writeFile).toHaveBeenCalledWith(
         expect.stringMatching(/[\\/]?\.pi[\\/]agents[\\/]oracle\.md$/),
-        "---\nname: oracle\n---\n",
+        "updated agent content",
         "utf8",
       );
       expect(notify).toHaveBeenCalledWith("Agent edited");
@@ -208,6 +215,23 @@ describe("extensions/agent-manager", () => {
 
       await handleEdit({ ui: { select: vi.fn().mockResolvedValueOnce(undefined), notify } } as never);
 
+      expect(notify).toHaveBeenCalledWith("Agent editing cancelled", "info");
+    });
+
+    it("reports cancellation when the agent editor is dismissed", async () => {
+      vi.mocked(readdir).mockResolvedValueOnce(["oracle.md"] as never);
+      vi.mocked(readFile).mockResolvedValueOnce("---\nname: oracle\n---\n" as never);
+      const notify = vi.fn();
+
+      await handleEdit({
+        ui: {
+          select: vi.fn().mockResolvedValueOnce("local: oracle"),
+          editor: vi.fn().mockResolvedValueOnce(undefined),
+          notify,
+        },
+      } as never);
+
+      expect(writeFile).not.toHaveBeenCalled();
       expect(notify).toHaveBeenCalledWith("Agent editing cancelled", "info");
     });
   });
