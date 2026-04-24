@@ -37,7 +37,11 @@ const PromptFieldsSchema = object({
 });
 
 type PromptFields = InferOutput<typeof PromptFieldsSchema>;
-type PromptChoice = { path: string; label: string };
+type PromptChoice = {
+  path: string;
+  deletePath: string;
+  label: string;
+};
 
 export function parsePromptFormValues(values: PromptFields) {
   return parseObjectErrors(PromptFieldsSchema, values);
@@ -202,7 +206,14 @@ export async function handleDelete(ctx: ExtensionContext) {
     return;
   }
 
-  await getResourceFileSystem().removeFile(prompt.path);
+  const isGroupedPrompt = prompt.deletePath !== prompt.path;
+
+  if (isGroupedPrompt) {
+    await getResourceFileSystem().removeDirectory(prompt.deletePath);
+  } else {
+    await getResourceFileSystem().removeFile(prompt.deletePath);
+  }
+
   ctx.ui.notify("Prompt deleted");
 }
 
@@ -240,12 +251,18 @@ async function listPromptChoices() {
 
   for (const directory of directories) {
     try {
-      const names = await getResourceFileSystem().readDirectoryNames(directory.path);
+      const entries = await getResourceFileSystem().readDirectoryEntries(directory.path);
       choices.push(
-        ...names.map((name) => ({
-          path: join(directory.path, name),
-          label: `${directory.prefix}: ${basename(name, ".md")}`,
-        })),
+        ...entries.map((entry) => {
+          const entryPath = join(directory.path, entry.name);
+          const promptPath = entry.isDirectory() ? join(entryPath, "_index.md") : entryPath;
+
+          return {
+            path: promptPath,
+            deletePath: entryPath,
+            label: `${directory.prefix}: ${basename(entry.name, ".md")}`,
+          };
+        }),
       );
     } catch {
       // Ignore missing directories so local and global prompts can coexist.

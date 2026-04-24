@@ -228,6 +228,25 @@ describe("extensions/prompt-manager", () => {
       expect(notify).toHaveBeenCalledWith("Prompt edited");
     });
 
+    it("edits the selected grouped prompt index", async () => {
+      const groupedPromptPath = join("/test-home", ".pi", "prompts", "frontend", "_index.md");
+      seedMemoryResourceFileSystem({
+        [groupedPromptPath]: "---\nname: frontend\ntype: group\n---\n",
+      });
+      const select = vi.fn().mockResolvedValueOnce("global: frontend");
+      const editor = vi.fn().mockResolvedValueOnce("updated grouped prompt content");
+      const notify = vi.fn();
+
+      await handleEdit({ ui: { notify, select, editor } } as never);
+
+      const content = await getResourceFileSystem().readFile(groupedPromptPath, "utf8");
+
+      expect(select).toHaveBeenCalledWith("Edit Prompt", ["global: frontend"]);
+      expect(editor).toHaveBeenCalledWith("Edit Prompt", "---\nname: frontend\ntype: group\n---\n");
+      expect(content).toBe("updated grouped prompt content");
+      expect(notify).toHaveBeenCalledWith("Prompt edited");
+    });
+
     it("reports cancellation when the prompt editor is dismissed", async () => {
       seedMemoryResourceFileSystem({
         [expectedPromptPath]: "---\nname: create-react-component\n---\n",
@@ -261,6 +280,21 @@ describe("extensions/prompt-manager", () => {
 
       await expect(getResourceFileSystem().readFile(expectedPromptPath, "utf8")).rejects.toThrow();
       expect(select).toHaveBeenCalledWith("Delete Prompt", ["global: create-react-component"]);
+      expect(notify).toHaveBeenCalledWith("Prompt deleted");
+    });
+
+    it("deletes the selected grouped prompt directory", async () => {
+      const groupedPromptPath = join("/test-home", ".pi", "prompts", "frontend", "_index.md");
+      seedMemoryResourceFileSystem({
+        [groupedPromptPath]: "---\nname: frontend\ntype: group\n---\n",
+      });
+      const select = vi.fn().mockResolvedValueOnce("global: frontend");
+      const notify = vi.fn();
+
+      await handleDelete({ ui: { notify, select } } as never);
+
+      await expect(getResourceFileSystem().readFile(groupedPromptPath, "utf8")).rejects.toThrow();
+      expect(select).toHaveBeenCalledWith("Delete Prompt", ["global: frontend"]);
       expect(notify).toHaveBeenCalledWith("Prompt deleted");
     });
   });
