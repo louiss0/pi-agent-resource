@@ -177,7 +177,7 @@ describe("skill manager handlers", () => {
       const form = createOptionalSkillForm(createTui(), createTheme(), vi.fn());
 
       form.focused = true;
-      for (const character of 'bad:path') {
+      for (const character of "bad:path") {
         form.handleInput(character);
       }
       form.handleInput(Key.tab);
