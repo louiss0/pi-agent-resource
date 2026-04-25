@@ -218,8 +218,10 @@ export class Form<T extends Record<string, string | number | boolean>>
       lines.push(...this.#spacingLines(), ...fieldLines);
     }
 
-    if (this.#footer.length > 0) {
-      lines.push(...this.#spacingLines(), truncateToWidth(this.#footer, width));
+    const footerLines = this.#renderFooterLines(width);
+
+    if (footerLines.length > 0) {
+      lines.push(...this.#spacingLines(), ...footerLines);
     }
 
     return lines;
@@ -342,5 +344,15 @@ export class Form<T extends Record<string, string | number | boolean>>
 
   #spacingLines() {
     return Array.from({ length: this.#spacing }, () => "");
+  }
+
+  #renderFooterLines(width: number) {
+    if (this.#footer.length === 0) {
+      return [];
+    }
+
+    return this.#footer
+      .split(/\r?\n/)
+      .map((line) => truncateToWidth(line, width));
   }
 }
