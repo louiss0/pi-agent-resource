@@ -42,7 +42,7 @@ import {
   SubCommands,
 } from "../shared/subcommands";
 
-const extensionName = "resource:skill";
+const extensionName = "skill-manager";
 
 export const SKILLS_DIRECTORY = join(homedir(), ".pi", "agents", "skills");
 export const PROJECT_EDITOR_CONFIG_FILE = ".pi-resource.toml";

@@ -36,7 +36,7 @@ import {
 	SubCommands,
 } from "../shared/subcommands";
 
-const extensionName = "resource:prompts";
+const extensionName = "prompt-manager";
 const globalPromptDirectory = join(homedir(), ".pi", "prompts");
 const localPromptDirectory = join(".pi", "prompts");
 const formOverlayOptions = {

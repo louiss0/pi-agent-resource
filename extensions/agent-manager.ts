@@ -23,7 +23,7 @@ import {
   SubCommands,
 } from "../shared/subcommands";
 
-const extensionName = "resource:agent";
+const extensionName = "agent-manager";
 const globalAgentDirectory = join(homedir(), ".pi", "agents");
 const localAgentDirectory = join(".pi", "agents");
 const formOverlayOptions = { overlay: true, overlayOptions: { offsetY: -500 } } as const;

@@ -22,19 +22,19 @@ describe("shared/runtime", () => {
     const notify = vi.fn();
     const ctx = { ui: { notify } };
 
-    notifyWhenUsingDevelopmentExtension("resource:agent", ctx);
-    notifyWhenUsingDevelopmentExtension("resource:agent", ctx);
-    notifyWhenUsingDevelopmentExtension("resource:skill", ctx);
+    notifyWhenUsingDevelopmentExtension("agent-manager", ctx);
+    notifyWhenUsingDevelopmentExtension("agent-manager", ctx);
+    notifyWhenUsingDevelopmentExtension("skill-manager", ctx);
 
     expect(notify).toHaveBeenCalledTimes(2);
     expect(notify).toHaveBeenNthCalledWith(
       1,
-      "resource:agent is running in development mode. Nothing is being saved.",
+      "agent-manager is running in development mode. Nothing is being saved.",
       "warning",
     );
     expect(notify).toHaveBeenNthCalledWith(
       2,
-      "resource:skill is running in development mode. Nothing is being saved.",
+      "skill-manager is running in development mode. Nothing is being saved.",
       "warning",
     );
   });
@@ -44,7 +44,7 @@ describe("shared/runtime", () => {
     const on = vi.fn();
     const notify = vi.fn();
 
-    registerDevelopmentExtensionNotice({ on } as never, "resource:prompts");
+    registerDevelopmentExtensionNotice({ on } as never, "prompt-manager");
 
     expect(on).toHaveBeenCalledTimes(1);
     expect(on).toHaveBeenCalledWith("session_start", expect.any(Function));
@@ -53,7 +53,7 @@ describe("shared/runtime", () => {
     await handler({}, { ui: { notify } });
 
     expect(notify).toHaveBeenCalledWith(
-      "resource:prompts is running in development mode. Nothing is being saved.",
+      "prompt-manager is running in development mode. Nothing is being saved.",
       "warning",
     );
   });
@@ -62,7 +62,7 @@ describe("shared/runtime", () => {
     vi.stubEnv("PI_RESOURCE_DEV", "0");
     const notify = vi.fn();
 
-    notifyWhenUsingDevelopmentExtension("resource:agent", { ui: { notify } });
+    notifyWhenUsingDevelopmentExtension("agent-manager", { ui: { notify } });
 
     expect(notify).not.toHaveBeenCalled();
   });
