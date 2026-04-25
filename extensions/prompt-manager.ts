@@ -36,6 +36,7 @@ import {
 	SubCommands,
 } from "../shared/subcommands";
 
+const extensionName = "resource:prompts";
 const globalPromptDirectory = join(homedir(), ".pi", "prompts");
 const localPromptDirectory = join(".pi", "prompts");
 const formOverlayOptions = {
@@ -148,14 +149,14 @@ class PromptTemplateOverlay extends Container {
 }
 
 export default (pi: ExtensionAPI) => {
-	registerDevelopmentExtensionNotice(pi);
+	registerDevelopmentExtensionNotice(pi, extensionName);
 
 	pi.registerCommand("resource:prompts", {
 		description: "This is for managing prompts",
 		getArgumentCompletions:
 			getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("prompt"),
 		handler: async (arg, ctx) => {
-			notifyWhenUsingDevelopmentExtension(ctx);
+			notifyWhenUsingDevelopmentExtension(extensionName, ctx);
 			const result = SubCommands.parse(arg);
 			if (!result.success) {
 				ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");

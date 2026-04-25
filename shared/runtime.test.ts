@@ -17,27 +17,34 @@ describe("shared/runtime", () => {
     expect(isDevelopmentExtensionRuntime()).toBe(true);
   });
 
-  it("notifies once when the extension is running from development sources", () => {
+  it("notifies once per extension when the extension is running from development sources", () => {
     vi.stubEnv("PI_RESOURCE_DEV", "1");
     const notify = vi.fn();
     const ctx = { ui: { notify } };
 
-    notifyWhenUsingDevelopmentExtension(ctx);
-    notifyWhenUsingDevelopmentExtension(ctx);
+    notifyWhenUsingDevelopmentExtension("resource:agent", ctx);
+    notifyWhenUsingDevelopmentExtension("resource:agent", ctx);
+    notifyWhenUsingDevelopmentExtension("resource:skill", ctx);
 
-    expect(notify).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith(
-      "pi-agent-resource is running in development mode. Nothing is being saved.",
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenNthCalledWith(
+      1,
+      "resource:agent is running in development mode. Nothing is being saved.",
+      "warning",
+    );
+    expect(notify).toHaveBeenNthCalledWith(
+      2,
+      "resource:skill is running in development mode. Nothing is being saved.",
       "warning",
     );
   });
-+
+
   it("registers a session_start notice so users are warned during activation", async () => {
     vi.stubEnv("PI_RESOURCE_DEV", "1");
     const on = vi.fn();
     const notify = vi.fn();
 
-    registerDevelopmentExtensionNotice({ on } as never);
+    registerDevelopmentExtensionNotice({ on } as never, "resource:prompts");
 
     expect(on).toHaveBeenCalledTimes(1);
     expect(on).toHaveBeenCalledWith("session_start", expect.any(Function));
@@ -46,7 +53,7 @@ describe("shared/runtime", () => {
     await handler({}, { ui: { notify } });
 
     expect(notify).toHaveBeenCalledWith(
-      "pi-agent-resource is running in development mode. Nothing is being saved.",
+      "resource:prompts is running in development mode. Nothing is being saved.",
       "warning",
     );
   });
@@ -55,7 +62,7 @@ describe("shared/runtime", () => {
     vi.stubEnv("PI_RESOURCE_DEV", "0");
     const notify = vi.fn();
 
-    notifyWhenUsingDevelopmentExtension({ ui: { notify } });
+    notifyWhenUsingDevelopmentExtension("resource:agent", { ui: { notify } });
 
     expect(notify).not.toHaveBeenCalled();
   });
