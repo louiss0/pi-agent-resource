@@ -33,11 +33,16 @@ import {
 import { ConfirmationBox, Form, LabelledInput } from "../shared/components";
 import { getResourceFileSystem } from "../shared/filesystem";
 import { parseObjectErrors } from "../shared/parse";
-import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
+import {
+  notifyWhenUsingDevelopmentExtension,
+  registerDevelopmentExtensionNotice,
+} from "../shared/runtime";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
 } from "../shared/subcommands";
+
+const extensionName = "skill-manager";
 
 export const SKILLS_DIRECTORY = join(homedir(), ".pi", "agents", "skills");
 export const PROJECT_EDITOR_CONFIG_FILE = ".pi-resource.toml";
@@ -605,12 +610,14 @@ async function readSkillFile(filePath: string) {
 }
 
 export default (pi: ExtensionAPI) => {
+  registerDevelopmentExtensionNotice(pi, extensionName);
+
   pi.registerCommand("resource:skill", {
     description: "This is for managing skills",
     getArgumentCompletions:
       getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("skill"),
     handler: async (arg, ctx) => {
-      notifyWhenUsingDevelopmentExtension(ctx);
+      notifyWhenUsingDevelopmentExtension(extensionName, ctx);
       const result = parseSkillCommandArgument(arg);
 
       if (!result.success) {
