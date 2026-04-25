@@ -1,4 +1,3 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
@@ -13,7 +12,9 @@ import {
   string,
 } from "valibot";
 import { Form, LabelledInput } from "../shared/components";
+import { getResourceFileSystem } from "../shared/filesystem";
 import { parseObjectErrors } from "../shared/parse";
+import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -83,6 +84,7 @@ export default (pi: ExtensionAPI) => {
     getArgumentCompletions:
       getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("agent"),
     handler: async (arg, ctx) => {
+      notifyWhenUsingDevelopmentExtension(ctx);
       const result = SubCommands.parse(arg);
       if (!result.success) {
         ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");
@@ -115,9 +117,10 @@ export async function handleCreate(ctx: ExtensionContext) {
     return;
   }
 
+  const fileSystem = getResourceFileSystem();
   const filePath = join(globalAgentDirectory, `${values.name}.md`);
-  await mkdir(globalAgentDirectory, { recursive: true });
-  await writeFile(filePath, renderFrontmatter(values), "utf8");
+  await fileSystem.mkdir(globalAgentDirectory, { recursive: true });
+  await fileSystem.writeFile(filePath, renderFrontmatter(values), "utf8");
   ctx.ui.notify("Agent created");
 }
 
@@ -129,7 +132,8 @@ export async function handleEdit(ctx: ExtensionContext) {
     return;
   }
 
-  const content = await readFile(agent.path, "utf8");
+  const fileSystem = getResourceFileSystem();
+  const content = await fileSystem.readFile(agent.path, "utf8");
   const editedContent = await ctx.ui.editor("Edit Agent", content);
 
   if (editedContent === undefined) {
@@ -137,7 +141,7 @@ export async function handleEdit(ctx: ExtensionContext) {
     return;
   }
 
-  await writeFile(agent.path, editedContent, "utf8");
+  await fileSystem.writeFile(agent.path, editedContent, "utf8");
   ctx.ui.notify("Agent edited");
 }
 
@@ -149,7 +153,7 @@ export async function handleDelete(ctx: ExtensionContext) {
     return;
   }
 
-  await rm(agent.path, { force: true });
+  await getResourceFileSystem().removeFile(agent.path);
   ctx.ui.notify("Agent deleted");
 }
 
@@ -188,7 +192,7 @@ async function listAgentChoices() {
 
   for (const directory of directories) {
     try {
-      const names = await readdir(directory.path);
+      const names = await getResourceFileSystem().readDirectoryNames(directory.path);
       choices.push(
         ...names.map((name) => ({
           path: join(directory.path, name),

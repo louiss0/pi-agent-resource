@@ -1,249 +1,316 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
-import { Container, Editor, Key, Spacer, Text, type TUI, matchesKey } from "@mariozechner/pi-tui";
-import { InferOutput, maxLength, minLength, object, optional, pipe, regex, string } from "valibot";
-import { Form, LabelledInput } from "../shared/components";
-import { parseObjectErrors } from "../shared/parse";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+	Theme,
+} from "@mariozechner/pi-coding-agent";
 import {
-  getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
-  SubCommands,
+	Container,
+	Editor,
+	Key,
+	matchesKey,
+	Spacer,
+	Text,
+	type TUI,
+} from "@mariozechner/pi-tui";
+import {
+	InferOutput,
+	maxLength,
+	minLength,
+	object,
+	optional,
+	pipe,
+	regex,
+	string,
+} from "valibot";
+import { Form, LabelledInput } from "../shared/components";
+import { getResourceFileSystem } from "../shared/filesystem";
+import { parseObjectErrors } from "../shared/parse";
+import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
+import {
+	getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
+	SubCommands,
 } from "../shared/subcommands";
 
 const globalPromptDirectory = join(homedir(), ".pi", "prompts");
 const localPromptDirectory = join(".pi", "prompts");
-const formOverlayOptions = { overlay: true, overlayOptions: { offsetY: -500 } } as const;
+const formOverlayOptions = {
+	overlay: true,
+	overlayOptions: { offsetY: -500 },
+} as const;
 const promptNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const argumentHintPattern = /^(?:\s*(?:<[^<>\s]+>|\[[^\[\]\s]+\])\s*)*$/;
 
 const PromptFieldsSchema = object({
-  name: pipe(
-    string(),
-    minLength(3, "Name must be at least 3 characters"),
-    maxLength(48, "Name must be 48 characters or fewer"),
-    regex(promptNamePattern, "Name must be lowercase letters, numbers, and dashes only"),
-  ),
-  description: pipe(
-    string(),
-    minLength(35, "Description must be at least 35 characters"),
-    maxLength(1024, "Description must be 1024 characters or fewer"),
-  ),
-  "argument-hint": optional(
-    pipe(string(), regex(argumentHintPattern, "Argument hint must use [] or <> tokens")),
-    "",
-  ),
+	name: pipe(
+		string(),
+		minLength(3, "Name must be at least 3 characters"),
+		maxLength(48, "Name must be 48 characters or fewer"),
+		regex(
+			promptNamePattern,
+			"Name must be lowercase letters, numbers, and dashes only",
+		),
+	),
+	description: pipe(
+		string(),
+		minLength(35, "Description must be at least 35 characters"),
+		maxLength(1024, "Description must be 1024 characters or fewer"),
+	),
+	"argument-hint": optional(
+		pipe(
+			string(),
+			regex(argumentHintPattern, "Argument hint must use [] or <> tokens"),
+		),
+		"",
+	),
 });
 
 type PromptFields = InferOutput<typeof PromptFieldsSchema>;
-type PromptChoice = { path: string; label: string };
+type PromptChoice = {
+	path: string;
+	deletePath: string;
+	label: string;
+};
 
 export function parsePromptFormValues(values: PromptFields) {
-  return parseObjectErrors(PromptFieldsSchema, values);
+	return parseObjectErrors(PromptFieldsSchema, values);
 }
 
 export function createPromptForm(
-  tui: TUI,
-  theme: Theme,
-  done: (value: PromptFields | null) => void,
+	tui: TUI,
+	theme: Theme,
+	done: (value: PromptFields | null) => void,
 ) {
-  return new Form<PromptFields>(tui, done, {
-    title: "Create Prompt",
-    fields: [
-      new LabelledInput("name", theme),
-      new LabelledInput("description", theme),
-      new LabelledInput("argument-hint", theme),
-    ],
-    parse: parsePromptFormValues,
-    footer:
-      "* required | argument-hint is optional | Enter next/submit | Tab switch field | Esc cancel\nTemplate opens in the editor overlay next. Use <> for required hints and [] for optional hints.",
-    spacing: 1,
-  });
+	return new Form<PromptFields>(tui, done, {
+		title: "Create Prompt",
+		fields: [
+			new LabelledInput("name", theme),
+			new LabelledInput("description", theme),
+			new LabelledInput("argument-hint", theme),
+		],
+		parse: parsePromptFormValues,
+		footer:
+			"* required | argument-hint is optional | Enter next/submit | Tab switch field | Esc cancel\nTemplate opens in the editor overlay next. Use <> for required hints and [] for optional hints.",
+		spacing: 1,
+	});
 }
 
 class PromptTemplateOverlay extends Container {
-  #editor: Editor;
-  #done: (value: string | undefined) => void;
+	#editor: Editor;
+	#done: (value: string | undefined) => void;
 
-  constructor(tui: TUI, theme: Theme, done: (value: string | undefined) => void) {
-    super();
-    this.#done = done;
-    this.#editor = new Editor(tui, {
-      borderColor: (text) => theme.fg("accent", text),
-      selectList: {
-        selectedPrefix: (text) => theme.fg("accent", text),
-        selectedText: (text) => theme.fg("accent", text),
-        description: (text) => theme.fg("muted", text),
-        scrollInfo: (text) => theme.fg("dim", text),
-        noMatch: (text) => theme.fg("warning", text),
-      },
-    });
+	constructor(
+		tui: TUI,
+		theme: Theme,
+		done: (value: string | undefined) => void,
+	) {
+		super();
+		this.#done = done;
+		this.#editor = new Editor(tui, {
+			borderColor: (text) => theme.fg("accent", text),
+			selectList: {
+				selectedPrefix: (text) => theme.fg("accent", text),
+				selectedText: (text) => theme.fg("accent", text),
+				description: (text) => theme.fg("muted", text),
+				scrollInfo: (text) => theme.fg("dim", text),
+				noMatch: (text) => theme.fg("warning", text),
+			},
+		});
 
-    this.#editor.onSubmit = (value) => done(value);
+		this.#editor.onSubmit = (value) => done(value);
 
-    this.addChild(new Text(theme.fg("accent", "Edit Prompt Template")));
-    this.addChild(new Spacer(1));
-    this.addChild(this.#editor);
-    this.addChild(new Spacer(1));
-    this.addChild(
-      new Text(
-        theme.fg(
-          "dim",
-          "* required in form | argument-hint optional | Enter submit | Shift+Enter newline | Esc cancel",
-        ),
-      ),
-    );
-  }
+		this.addChild(new Text(theme.fg("accent", "Edit Prompt Template")));
+		this.addChild(new Spacer(1));
+		this.addChild(this.#editor);
+		this.addChild(new Spacer(1));
+		this.addChild(
+			new Text(
+				theme.fg(
+					"dim",
+					"* required in form | argument-hint optional | Enter submit | Shift+Enter newline | Esc cancel",
+				),
+			),
+		);
+	}
 
-  handleInput(data: string) {
-    if (matchesKey(data, Key.escape)) {
-      this.#done(undefined);
-      return;
-    }
+	handleInput(data: string) {
+		if (matchesKey(data, Key.escape)) {
+			this.#done(undefined);
+			return;
+		}
 
-    this.#editor.handleInput(data);
-  }
+		this.#editor.handleInput(data);
+	}
 }
 
 export default (pi: ExtensionAPI) => {
-  pi.registerCommand("resource:prompts", {
-    description: "This is for managing prompts",
-    getArgumentCompletions:
-      getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("prompt"),
-    handler: async (arg, ctx) => {
-      const result = SubCommands.parse(arg);
-      if (!result.success) {
-        ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");
-        return;
-      }
+	pi.registerCommand("resource:prompts", {
+		description: "This is for managing prompts",
+		getArgumentCompletions:
+			getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("prompt"),
+		handler: async (arg, ctx) => {
+			notifyWhenUsingDevelopmentExtension(ctx);
+			const result = SubCommands.parse(arg);
+			if (!result.success) {
+				ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");
+				return;
+			}
 
-      switch (result.output) {
-        case "create":
-          await handleCreate(ctx);
-          break;
-        case "edit":
-          await handleEdit(ctx);
-          break;
-        case "delete":
-          await handleDelete(ctx);
-          break;
-      }
-    },
-  });
+			switch (result.output) {
+				case "create":
+					await handleCreate(ctx);
+					break;
+				case "edit":
+					await handleEdit(ctx);
+					break;
+				case "delete":
+					await handleDelete(ctx);
+					break;
+			}
+		},
+	});
 };
 
 export async function handleCreate(ctx: ExtensionContext) {
-  const values = await ctx.ui.custom<PromptFields | null>(
-    (tui, theme, _keyboard, done) => createPromptForm(tui, theme, done),
-    formOverlayOptions,
-  );
+	const values = await ctx.ui.custom<PromptFields | null>(
+		(tui, theme, _keyboard, done) => createPromptForm(tui, theme, done),
+		formOverlayOptions,
+	);
 
-  if (!values) {
-    ctx.ui.notify("Prompt creation cancelled", "info");
-    return;
-  }
+	if (!values) {
+		ctx.ui.notify("Prompt creation cancelled", "info");
+		return;
+	}
 
-  const template = await ctx.ui.custom<string | undefined>(
-    (tui, theme, _keyboard, done) => new PromptTemplateOverlay(tui, theme, done),
-    {
-      overlay: true,
-      overlayOptions: {
-        anchor: "center",
-        width: "80%",
-        maxHeight: "80%",
-      },
-    },
-  );
+	const template = await ctx.ui.custom<string | undefined>(
+		(tui, theme, _keyboard, done) =>
+			new PromptTemplateOverlay(tui, theme, done),
+		{
+			overlay: true,
+			overlayOptions: {
+				anchor: "center",
+				width: "80%",
+				maxHeight: "80%",
+			},
+		},
+	);
 
-  if (template === undefined) {
-    ctx.ui.notify("Prompt creation cancelled", "info");
-    return;
-  }
+	if (template === undefined) {
+		ctx.ui.notify("Prompt creation cancelled", "info");
+		return;
+	}
 
-  const filePath = join(globalPromptDirectory, `${values.name}.md`);
-  await mkdir(globalPromptDirectory, { recursive: true });
-  await writeFile(filePath, `${renderFrontmatter(values)}\n${template}`.trimEnd() + "\n", "utf8");
-  ctx.ui.notify("Prompt created");
+	const fileSystem = getResourceFileSystem();
+	const filePath = join(globalPromptDirectory, `${values.name}.md`);
+	await fileSystem.mkdir(globalPromptDirectory, { recursive: true });
+	await fileSystem.writeFile(
+		filePath,
+		`${renderFrontmatter(values)}\n${template}`.trimEnd() + "\n",
+		"utf8",
+	);
+	ctx.ui.notify("Prompt created");
 }
 
 export async function handleEdit(ctx: ExtensionContext) {
-  const prompt = await pickPrompt(ctx, "Edit Prompt");
+	const prompt = await pickPrompt(ctx, "Edit Prompt");
 
-  if (!prompt) {
-    ctx.ui.notify("Prompt editing cancelled", "info");
-    return;
-  }
+	if (!prompt) {
+		ctx.ui.notify("Prompt editing cancelled", "info");
+		return;
+	}
 
-  const content = await readFile(prompt.path, "utf8");
-  const editedContent = await ctx.ui.editor("Edit Prompt", content);
+	const fileSystem = getResourceFileSystem();
+	const content = await fileSystem.readFile(prompt.path, "utf8");
+	const editedContent = await ctx.ui.editor("Edit Prompt", content);
 
-  if (editedContent === undefined) {
-    ctx.ui.notify("Prompt editing cancelled", "info");
-    return;
-  }
+	if (editedContent === undefined) {
+		ctx.ui.notify("Prompt editing cancelled", "info");
+		return;
+	}
 
-  await writeFile(prompt.path, editedContent, "utf8");
-  ctx.ui.notify("Prompt edited");
+	await fileSystem.writeFile(prompt.path, editedContent, "utf8");
+	ctx.ui.notify("Prompt edited");
 }
 
 export async function handleDelete(ctx: ExtensionContext) {
-  const prompt = await pickPrompt(ctx, "Delete Prompt");
+	const prompt = await pickPrompt(ctx, "Delete Prompt");
 
-  if (!prompt) {
-    ctx.ui.notify("Prompt deleting cancelled", "info");
-    return;
-  }
+	if (!prompt) {
+		ctx.ui.notify("Prompt deleting cancelled", "info");
+		return;
+	}
 
-  await rm(prompt.path, { force: true, recursive: true });
-  ctx.ui.notify("Prompt deleted");
+	const isGroupedPrompt = prompt.deletePath !== prompt.path;
+
+	if (isGroupedPrompt) {
+		await getResourceFileSystem().removeDirectory(prompt.deletePath);
+	} else {
+		await getResourceFileSystem().removeFile(prompt.deletePath);
+	}
+
+	ctx.ui.notify("Prompt deleted");
 }
 
 function renderFrontmatter(values: PromptFields) {
-  return ["---", ...Object.entries(values).map(([key, value]) => `${key}: ${value}`), "---", ""]
-    .join("\n");
+	return [
+		"---",
+		...Object.entries(values).map(([key, value]) => `${key}: ${value}`),
+		"---",
+		"",
+	].join("\n");
 }
 
 async function pickPrompt(ctx: ExtensionContext, title: string) {
-  const choices = await listPromptChoices();
+	const choices = await listPromptChoices();
 
-  if (choices.length === 0) {
-    ctx.ui.notify("No prompts found", "info");
-    return null;
-  }
+	if (choices.length === 0) {
+		ctx.ui.notify("No prompts found", "info");
+		return null;
+	}
 
-  const selectedLabel = await ctx.ui.select(
-    title,
-    choices.map((choice) => choice.label),
-  );
+	const selectedLabel = await ctx.ui.select(
+		title,
+		choices.map((choice) => choice.label),
+	);
 
-  if (!selectedLabel) {
-    return null;
-  }
+	if (!selectedLabel) {
+		return null;
+	}
 
-  return choices.find((choice) => choice.label === selectedLabel) ?? null;
+	return choices.find((choice) => choice.label === selectedLabel) ?? null;
 }
 
 async function listPromptChoices() {
-  const directories = [
-    { path: localPromptDirectory, prefix: "local" },
-    { path: globalPromptDirectory, prefix: "global" },
-  ] as const;
-  const choices: PromptChoice[] = [];
+	const directories = [
+		{ path: localPromptDirectory, prefix: "local" },
+		{ path: globalPromptDirectory, prefix: "global" },
+	] as const;
+	const choices: PromptChoice[] = [];
 
-  for (const directory of directories) {
-    try {
-      const names = await readdir(directory.path);
-      choices.push(
-        ...names.map((name) => ({
-          path: join(directory.path, name),
-          label: `${directory.prefix}: ${basename(name, ".md")}`,
-        })),
-      );
-    } catch {
-      // Ignore missing directories so local and global prompts can coexist.
-    }
-  }
+	for (const directory of directories) {
+		try {
+			const entries = await getResourceFileSystem().readDirectoryEntries(
+				directory.path,
+			);
+			choices.push(
+				...entries.map((entry) => {
+					const entryPath = join(directory.path, entry.name);
+					const promptPath = entry.isDirectory()
+						? join(entryPath, "_index.md")
+						: entryPath;
 
-  return choices;
+					return {
+						path: promptPath,
+						deletePath: entryPath,
+						label: `${directory.prefix}: ${basename(entry.name, ".md")}`,
+					};
+				}),
+			);
+		} catch {
+			// Ignore missing directories so local and global prompts can coexist.
+		}
+	}
+
+	return choices;
 }
-
