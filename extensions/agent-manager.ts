@@ -73,7 +73,7 @@ export function createAgentForm(tui: TUI, theme: Theme, done: (value: AgentField
     ],
     parse: parseAgentFormValues,
     footer:
-      "* required | Enter next/submit | Tab switch field | Esc cancel\nUse lowercase values. Tools use commas. * appears on the left label. Required fields cannot be removed.",
+      "* required | Enter next/submit | Tab switch field | Esc cancel\nUse lowercase values for every field. Separate tools with commas.",
     spacing: 1,
   });
 }

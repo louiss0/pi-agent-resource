@@ -375,6 +375,16 @@ describe("shared/components", () => {
       expect(lines.at(-1)).toContain("Footer");
     });
 
+    it("renders multiline footers as separate lines", () => {
+      const { form } = createForm("Title", [], { footer: "Footer line 1\nFooter line 2" });
+
+      const lines = form.render(45);
+
+      expect(lines).toContain("Footer line 1");
+      expect(lines).toContain("Footer line 2");
+      expect(lines.some((line) => line.includes("\n"))).toBe(false);
+    });
+
     it("renders the title and footer once", () => {
       const { form } = createForm("Title", [], { footer: "Footer" });
 

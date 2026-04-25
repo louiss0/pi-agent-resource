@@ -71,7 +71,7 @@ describe("extensions/agent-manager", () => {
       expect(form).toBeInstanceOf(Form);
       expect(lines).toContain("Create Agent");
       expect(lines).toContain("* required");
-      expect(lines).toContain("Use lowercase values. Tools use com");
+      expect(lines).toContain("Use lowercase values for every field");
     });
 
     it("renders the expected errors when invalid values are submitted", () => {
