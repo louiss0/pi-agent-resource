@@ -14,7 +14,10 @@ import {
 import { Form, LabelledInput } from "../shared/components";
 import { getResourceFileSystem } from "../shared/filesystem";
 import { parseObjectErrors } from "../shared/parse";
-import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
+import {
+  notifyWhenUsingDevelopmentExtension,
+  registerDevelopmentExtensionNotice,
+} from "../shared/runtime";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -79,6 +82,8 @@ export function createAgentForm(tui: TUI, theme: Theme, done: (value: AgentField
 }
 
 export default (pi: ExtensionAPI) => {
+  registerDevelopmentExtensionNotice(pi);
+
   pi.registerCommand("resource:agent", {
     description: "This is for managing agents",
     getArgumentCompletions:

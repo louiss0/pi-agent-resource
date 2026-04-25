@@ -1,6 +1,7 @@
 import {
   isDevelopmentExtensionRuntime,
   notifyWhenUsingDevelopmentExtension,
+  registerDevelopmentExtensionNotice,
   resetDevelopmentExtensionNotice,
 } from "./runtime";
 
@@ -26,8 +27,27 @@ describe("shared/runtime", () => {
 
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith(
-      "pi-agent-resource is running from development sources",
-      "info",
+      "pi-agent-resource is running in development mode. Nothing is being saved.",
+      "warning",
+    );
+  });
++
+  it("registers a session_start notice so users are warned during activation", async () => {
+    vi.stubEnv("PI_RESOURCE_DEV", "1");
+    const on = vi.fn();
+    const notify = vi.fn();
+
+    registerDevelopmentExtensionNotice({ on } as never);
+
+    expect(on).toHaveBeenCalledTimes(1);
+    expect(on).toHaveBeenCalledWith("session_start", expect.any(Function));
+
+    const handler = on.mock.calls[0]?.[1] as (event: unknown, ctx: unknown) => Promise<void>;
+    await handler({}, { ui: { notify } });
+
+    expect(notify).toHaveBeenCalledWith(
+      "pi-agent-resource is running in development mode. Nothing is being saved.",
+      "warning",
     );
   });
 

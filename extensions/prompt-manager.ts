@@ -27,7 +27,10 @@ import {
 import { Form, LabelledInput } from "../shared/components";
 import { getResourceFileSystem } from "../shared/filesystem";
 import { parseObjectErrors } from "../shared/parse";
-import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
+import {
+	notifyWhenUsingDevelopmentExtension,
+	registerDevelopmentExtensionNotice,
+} from "../shared/runtime";
 import {
 	getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
 	SubCommands,
@@ -145,6 +148,8 @@ class PromptTemplateOverlay extends Container {
 }
 
 export default (pi: ExtensionAPI) => {
+	registerDevelopmentExtensionNotice(pi);
+
 	pi.registerCommand("resource:prompts", {
 		description: "This is for managing prompts",
 		getArgumentCompletions:

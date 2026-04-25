@@ -33,7 +33,10 @@ import {
 import { ConfirmationBox, Form, LabelledInput } from "../shared/components";
 import { getResourceFileSystem } from "../shared/filesystem";
 import { parseObjectErrors } from "../shared/parse";
-import { notifyWhenUsingDevelopmentExtension } from "../shared/runtime";
+import {
+  notifyWhenUsingDevelopmentExtension,
+  registerDevelopmentExtensionNotice,
+} from "../shared/runtime";
 import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
@@ -605,6 +608,8 @@ async function readSkillFile(filePath: string) {
 }
 
 export default (pi: ExtensionAPI) => {
+  registerDevelopmentExtensionNotice(pi);
+
   pi.registerCommand("resource:skill", {
     description: "This is for managing skills",
     getArgumentCompletions:
