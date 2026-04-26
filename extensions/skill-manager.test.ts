@@ -30,7 +30,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawn } from "node:child_process";
-import {
+import registerSkillManager, {
   createOptionalSkillForm,
   createRequiredSkillForm,
   handleCreate,
@@ -41,6 +41,7 @@ import {
 } from "./skill-manager";
 
 describe("skill manager handlers", () => {
+  const extensionName = "skill-manager";
   const expectedSkillPath = join(
     "/test-home",
     ".pi",
@@ -117,6 +118,32 @@ describe("skill manager handlers", () => {
 
   afterEach(() => {
     resetResourceFileSystem();
+  });
+
+  describe("extension registration", () => {
+    it("shows the development notice when the command is used", async () => {
+      vi.stubEnv("PI_RESOURCE_DEV", "1");
+      const registerCommand = vi.fn();
+      const notify = vi.fn();
+
+      registerSkillManager({ registerCommand } as never);
+
+      expect(registerCommand).toHaveBeenCalledWith(
+        "resource:skill",
+        expect.objectContaining({ description: "This is for managing skills" }),
+      );
+
+      const command = registerCommand.mock.calls[0]?.[1] as {
+        handler: (arg: string, ctx: { ui: { notify: typeof notify } }) => Promise<void>;
+      };
+      await command.handler("bogus", { ui: { notify } });
+
+      expect(notify).toHaveBeenNthCalledWith(
+        1,
+        `${extensionName} is running in development mode. Nothing is being saved.`,
+        "warning",
+      );
+    });
   });
 
   describe("createRequiredSkillForm", () => {

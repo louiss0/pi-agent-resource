@@ -1,5 +1,3 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-
 const shownDevelopmentNotices = new Set<string>();
 
 function getDevelopmentNotice(extensionName: string) {
@@ -27,15 +25,6 @@ export function notifyWhenUsingDevelopmentExtension(
 
 	shownDevelopmentNotices.add(extensionName);
 	ctx.ui.notify(getDevelopmentNotice(extensionName), "warning");
-}
-
-export function registerDevelopmentExtensionNotice(
-	pi: ExtensionAPI,
-	extensionName: string,
-) {
-	pi.on("session_start", async (_event, ctx) => {
-		notifyWhenUsingDevelopmentExtension(extensionName, ctx);
-	});
 }
 
 export function resetDevelopmentExtensionNotice() {
