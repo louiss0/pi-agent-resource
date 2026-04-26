@@ -9,6 +9,7 @@ import {
 	useMemoryResourceFileSystem,
 } from "../shared/filesystem";
 import { resetDevelopmentExtensionNotice } from "../shared/runtime";
+import { formOverlayOptions, modalEditorOverlayOptions } from "../shared/ui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
 	const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -25,7 +26,7 @@ vi.mock("node:os", () => ({
 	homedir: () => "/test-home",
 }));
 
-import {
+import registerPromptManager, {
 	createPromptForm,
 	handleCreate,
 	handleDelete,
@@ -34,6 +35,7 @@ import {
 } from "./prompt-manager";
 
 describe("extensions/prompt-manager", () => {
+	const extensionName = "prompt-manager";
 	const expectedPromptPath = join(
 		"/test-home",
 		".pi",
@@ -66,6 +68,32 @@ describe("extensions/prompt-manager", () => {
 
 	afterEach(() => {
 		resetResourceFileSystem();
+	});
+
+	describe("extension registration", () => {
+		it("shows the development notice when the command is used", async () => {
+			vi.stubEnv("PI_RESOURCE_DEV", "1");
+			const registerCommand = vi.fn();
+			const notify = vi.fn();
+
+			registerPromptManager({ registerCommand } as never);
+
+			expect(registerCommand).toHaveBeenCalledWith(
+				"resource:prompts",
+				expect.objectContaining({ description: "This is for managing prompts" }),
+			);
+
+			const command = registerCommand.mock.calls[0]?.[1] as {
+				handler: (arg: string, ctx: { ui: { notify: typeof notify } }) => Promise<void>;
+			};
+			await command.handler("bogus", { ui: { notify } });
+
+			expect(notify).toHaveBeenNthCalledWith(
+				1,
+				`${extensionName} is running in development mode. Nothing is being saved.`,
+				"warning",
+			);
+		});
 	});
 
 	describe("createPromptForm", () => {
@@ -198,14 +226,8 @@ describe("extensions/prompt-manager", () => {
 					.render(80)
 					.join("\n"),
 			).toContain("Edit Prompt Template");
-			expect(formOptions).toEqual({
-				overlay: true,
-				overlayOptions: { offsetY: -500 },
-			});
-			expect(editorOptions).toEqual({
-				overlay: true,
-				overlayOptions: { anchor: "center", width: "80%", maxHeight: "80%" },
-			});
+			expect(formOptions).toEqual(formOverlayOptions);
+			expect(editorOptions).toEqual(modalEditorOverlayOptions);
 			expect(content).toContain("argument-hint: <name> [directory]");
 			expect(content).toContain("Write the component template here");
 			expect(notify).toHaveBeenCalledWith("Prompt created");

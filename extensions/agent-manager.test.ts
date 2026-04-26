@@ -9,6 +9,7 @@ import {
   useMemoryResourceFileSystem,
 } from "../shared/filesystem";
 import { resetDevelopmentExtensionNotice } from "../shared/runtime";
+import { formOverlayOptions } from "../shared/ui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -25,7 +26,7 @@ vi.mock("node:os", () => ({
   homedir: () => "/test-home",
 }));
 
-import {
+import registerAgentManager, {
   createAgentForm,
   handleCreate,
   handleDelete,
@@ -34,6 +35,7 @@ import {
 } from "./agent-manager";
 
 describe("extensions/agent-manager", () => {
+  const extensionName = "agent-manager";
   const expectedAgentPath = join("/test-home", ".pi", "agents", "oracle.md");
 
   function createTheme() {
@@ -61,6 +63,32 @@ describe("extensions/agent-manager", () => {
 
   afterEach(() => {
     resetResourceFileSystem();
+  });
+
+  describe("extension registration", () => {
+    it("shows the development notice when the command is used", async () => {
+      vi.stubEnv("PI_RESOURCE_DEV", "1");
+      const registerCommand = vi.fn();
+      const notify = vi.fn();
+
+      registerAgentManager({ registerCommand } as never);
+
+      expect(registerCommand).toHaveBeenCalledWith(
+        "resource:agent",
+        expect.objectContaining({ description: "This is for managing agents" }),
+      );
+
+      const command = registerCommand.mock.calls[0]?.[1] as {
+        handler: (arg: string, ctx: { ui: { notify: typeof notify } }) => Promise<void>;
+      };
+      await command.handler("bogus", { ui: { notify } });
+
+      expect(notify).toHaveBeenNthCalledWith(
+        1,
+        `${extensionName} is running in development mode. Nothing is being saved.`,
+        "warning",
+      );
+    });
   });
 
   describe("createAgentForm", () => {
@@ -135,6 +163,23 @@ describe("extensions/agent-manager", () => {
       expect(lines).toContain("Tools are required");
       expect(lines).toContain("Model must be at least 2 characters");
     });
+
+    it("renders each field label once while typing after repeated rerenders", () => {
+      const form = createAgentForm(createTui(), createTheme(), vi.fn());
+
+      form.focused = true;
+
+      for (const character of "oracle") {
+        form.handleInput(character);
+        const lines = form.render(100).join("\n");
+
+        expect(lines.match(/name/g)).toHaveLength(1);
+        expect(lines.match(/description/g)).toHaveLength(1);
+        expect(lines.match(/tools/g)).toHaveLength(1);
+        expect(lines.match(/model/g)).toHaveLength(1);
+        expect(lines.match(/Create Agent/g)).toHaveLength(1);
+      }
+    });
   });
 
   describe("parseAgentFormValues", () => {
@@ -177,7 +222,7 @@ describe("extensions/agent-manager", () => {
       const content = await getResourceFileSystem().readFile(expectedAgentPath, "utf8");
 
       expect(component).toBeInstanceOf(Form);
-      expect(options).toEqual({ overlay: true, overlayOptions: { offsetY: -500 } });
+      expect(options).toEqual(formOverlayOptions);
       expect(content).toContain("name: oracle");
       expect(notify).toHaveBeenCalledWith("Agent created");
     });

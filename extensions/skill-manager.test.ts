@@ -9,6 +9,7 @@ import {
   useMemoryResourceFileSystem,
 } from "../shared/filesystem";
 import { resetDevelopmentExtensionNotice } from "../shared/runtime";
+import { formOverlayOptions, modalEditorOverlayOptions } from "../shared/ui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -30,7 +31,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawn } from "node:child_process";
-import {
+import registerSkillManager, {
   createOptionalSkillForm,
   createRequiredSkillForm,
   handleCreate,
@@ -41,6 +42,7 @@ import {
 } from "./skill-manager";
 
 describe("skill manager handlers", () => {
+  const extensionName = "skill-manager";
   const expectedSkillPath = join(
     "/test-home",
     ".pi",
@@ -82,10 +84,7 @@ describe("skill manager handlers", () => {
     expect(
       (component as Form<Record<string, string | boolean>>).render(80).join("\n"),
     ).toContain(title);
-    expect(options).toEqual({
-      overlay: true,
-      overlayOptions: { offsetY: -500 },
-    });
+    expect(options).toEqual(formOverlayOptions);
   }
 
   function expectEditorOverlayFactory(custom: ReturnType<typeof vi.fn>, callIndex: number) {
@@ -98,14 +97,7 @@ describe("skill manager handlers", () => {
     expect(
       (component as { render: (width: number) => string[] }).render(80).join("\n"),
     ).toContain("Edit Skill Markdown");
-    expect(options).toEqual({
-      overlay: true,
-      overlayOptions: {
-        anchor: "center",
-        width: "80%",
-        maxHeight: "80%",
-      },
-    });
+    expect(options).toEqual(modalEditorOverlayOptions);
   }
 
   beforeEach(() => {
@@ -117,6 +109,32 @@ describe("skill manager handlers", () => {
 
   afterEach(() => {
     resetResourceFileSystem();
+  });
+
+  describe("extension registration", () => {
+    it("shows the development notice when the command is used", async () => {
+      vi.stubEnv("PI_RESOURCE_DEV", "1");
+      const registerCommand = vi.fn();
+      const notify = vi.fn();
+
+      registerSkillManager({ registerCommand } as never);
+
+      expect(registerCommand).toHaveBeenCalledWith(
+        "resource:skill",
+        expect.objectContaining({ description: "This is for managing skills" }),
+      );
+
+      const command = registerCommand.mock.calls[0]?.[1] as {
+        handler: (arg: string, ctx: { ui: { notify: typeof notify } }) => Promise<void>;
+      };
+      await command.handler("bogus", { ui: { notify } });
+
+      expect(notify).toHaveBeenNthCalledWith(
+        1,
+        `${extensionName} is running in development mode. Nothing is being saved.`,
+        "warning",
+      );
+    });
   });
 
   describe("createRequiredSkillForm", () => {

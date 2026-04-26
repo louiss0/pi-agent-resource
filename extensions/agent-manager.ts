@@ -19,10 +19,11 @@ import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
 } from "../shared/subcommands";
+import { formOverlayOptions } from "../shared/ui";
 
+const extensionName = "agent-manager";
 const globalAgentDirectory = join(homedir(), ".pi", "agents");
 const localAgentDirectory = join(".pi", "agents");
-const formOverlayOptions = { overlay: true, overlayOptions: { offsetY: -500 } } as const;
 const agentNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const lowerCommaSeparatedToolsPattern = /^[a-z0-9:-]+(?:\s*,\s*[a-z0-9:-]+)*$/;
 
@@ -84,7 +85,7 @@ export default (pi: ExtensionAPI) => {
     getArgumentCompletions:
       getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("agent"),
     handler: async (arg, ctx) => {
-      notifyWhenUsingDevelopmentExtension(ctx);
+      notifyWhenUsingDevelopmentExtension(extensionName, ctx);
       const result = SubCommands.parse(arg);
       if (!result.success) {
         ctx.ui.notify(`Invalid command: ${result.errorMessage}`, "error");

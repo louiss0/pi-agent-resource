@@ -38,6 +38,9 @@ import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
 } from "../shared/subcommands";
+import { formOverlayOptions, modalEditorOverlayOptions } from "../shared/ui";
+
+const extensionName = "skill-manager";
 
 export const SKILLS_DIRECTORY = join(homedir(), ".pi", "agents", "skills");
 export const PROJECT_EDITOR_CONFIG_FILE = ".pi-resource.toml";
@@ -46,7 +49,6 @@ const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const pathLikePattern =
   /^(?:$|~?[/.\\]|[A-Za-z]:[\\/]|\.\.?[\\/]|[^<>:"|?*\r\n]+(?:[\\/][^<>:"|?*\r\n]+)*)$/;
 const commaSeparatedAllowedToolsPattern = /^(?:$|[a-z][a-z0-9-]*(?:\s*,\s*[a-z][a-z0-9-]*)*)$/;
-const formOverlayOptions = { overlay: true, overlayOptions: { offsetY: -500 } } as const;
 
 const RequiredAgentSkillFieldsSchema = object({
   name: pipe(
@@ -295,14 +297,7 @@ export async function handleEdit(
   } else {
     const editedContent = await ctx.ui.custom<string | undefined>(
       (tui, theme, _kb, done) => new SkillEditorOverlay(tui, theme, currentContent, done),
-      {
-        overlay: true,
-        overlayOptions: {
-          anchor: "center",
-          width: "80%",
-          maxHeight: "80%",
-        },
-      },
+      modalEditorOverlayOptions,
     );
 
     if (editedContent === undefined) {
@@ -610,7 +605,7 @@ export default (pi: ExtensionAPI) => {
     getArgumentCompletions:
       getFilterSubcommandArgumentCompletionFromStringUsingSubLabel("skill"),
     handler: async (arg, ctx) => {
-      notifyWhenUsingDevelopmentExtension(ctx);
+      notifyWhenUsingDevelopmentExtension(extensionName, ctx);
       const result = parseSkillCommandArgument(arg);
 
       if (!result.success) {
