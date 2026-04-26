@@ -9,6 +9,7 @@ import {
   useMemoryResourceFileSystem,
 } from "../shared/filesystem";
 import { resetDevelopmentExtensionNotice } from "../shared/runtime";
+import { formOverlayOptions } from "../shared/ui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -221,7 +222,7 @@ describe("extensions/agent-manager", () => {
       const content = await getResourceFileSystem().readFile(expectedAgentPath, "utf8");
 
       expect(component).toBeInstanceOf(Form);
-      expect(options).toEqual({ overlay: true, overlayOptions: { offsetY: -500 } });
+      expect(options).toEqual(formOverlayOptions);
       expect(content).toContain("name: oracle");
       expect(notify).toHaveBeenCalledWith("Agent created");
     });

@@ -9,6 +9,7 @@ import {
   useMemoryResourceFileSystem,
 } from "../shared/filesystem";
 import { resetDevelopmentExtensionNotice } from "../shared/runtime";
+import { formOverlayOptions, modalEditorOverlayOptions } from "../shared/ui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
   const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -83,10 +84,7 @@ describe("skill manager handlers", () => {
     expect(
       (component as Form<Record<string, string | boolean>>).render(80).join("\n"),
     ).toContain(title);
-    expect(options).toEqual({
-      overlay: true,
-      overlayOptions: { offsetY: -500 },
-    });
+    expect(options).toEqual(formOverlayOptions);
   }
 
   function expectEditorOverlayFactory(custom: ReturnType<typeof vi.fn>, callIndex: number) {
@@ -99,14 +97,7 @@ describe("skill manager handlers", () => {
     expect(
       (component as { render: (width: number) => string[] }).render(80).join("\n"),
     ).toContain("Edit Skill Markdown");
-    expect(options).toEqual({
-      overlay: true,
-      overlayOptions: {
-        anchor: "center",
-        width: "80%",
-        maxHeight: "80%",
-      },
-    });
+    expect(options).toEqual(modalEditorOverlayOptions);
   }
 
   beforeEach(() => {

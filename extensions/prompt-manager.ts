@@ -32,14 +32,11 @@ import {
 	getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
 	SubCommands,
 } from "../shared/subcommands";
+import { formOverlayOptions, modalEditorOverlayOptions } from "../shared/ui";
 
 const extensionName = "prompt-manager";
 const globalPromptDirectory = join(homedir(), ".pi", "prompts");
 const localPromptDirectory = join(".pi", "prompts");
-const formOverlayOptions = {
-	overlay: true,
-	overlayOptions: { offsetY: -500 },
-} as const;
 const promptNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const argumentHintPattern = /^(?:\s*(?:<[^<>\s]+>|\[[^\[\]\s]+\])\s*)*$/;
 
@@ -187,14 +184,7 @@ export async function handleCreate(ctx: ExtensionContext) {
 	const template = await ctx.ui.custom<string | undefined>(
 		(tui, theme, _keyboard, done) =>
 			new PromptTemplateOverlay(tui, theme, done),
-		{
-			overlay: true,
-			overlayOptions: {
-				anchor: "center",
-				width: "80%",
-				maxHeight: "80%",
-			},
-		},
+		modalEditorOverlayOptions,
 	);
 
 	if (template === undefined) {

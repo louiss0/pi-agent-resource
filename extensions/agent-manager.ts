@@ -19,11 +19,11 @@ import {
   getFilterSubcommandArgumentCompletionFromStringUsingSubLabel,
   SubCommands,
 } from "../shared/subcommands";
+import { formOverlayOptions } from "../shared/ui";
 
 const extensionName = "agent-manager";
 const globalAgentDirectory = join(homedir(), ".pi", "agents");
 const localAgentDirectory = join(".pi", "agents");
-const formOverlayOptions = { overlay: true, overlayOptions: { offsetY: -500 } } as const;
 const agentNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const lowerCommaSeparatedToolsPattern = /^[a-z0-9:-]+(?:\s*,\s*[a-z0-9:-]+)*$/;
 

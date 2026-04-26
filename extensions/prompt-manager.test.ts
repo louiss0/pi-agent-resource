@@ -9,6 +9,7 @@ import {
 	useMemoryResourceFileSystem,
 } from "../shared/filesystem";
 import { resetDevelopmentExtensionNotice } from "../shared/runtime";
+import { formOverlayOptions, modalEditorOverlayOptions } from "../shared/ui";
 
 vi.mock("@mariozechner/pi-tui", async () => {
 	const module = await vi.importActual<typeof import("@mariozechner/pi-tui")>(
@@ -225,14 +226,8 @@ describe("extensions/prompt-manager", () => {
 					.render(80)
 					.join("\n"),
 			).toContain("Edit Prompt Template");
-			expect(formOptions).toEqual({
-				overlay: true,
-				overlayOptions: { offsetY: -500 },
-			});
-			expect(editorOptions).toEqual({
-				overlay: true,
-				overlayOptions: { anchor: "center", width: "80%", maxHeight: "80%" },
-			});
+			expect(formOptions).toEqual(formOverlayOptions);
+			expect(editorOptions).toEqual(modalEditorOverlayOptions);
 			expect(content).toContain("argument-hint: <name> [directory]");
 			expect(content).toContain("Write the component template here");
 			expect(notify).toHaveBeenCalledWith("Prompt created");
